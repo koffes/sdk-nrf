@@ -1,0 +1,11 @@
+tests:
+  test_nrf5340_audio_core_app_debug:
+    build_only: true
+    platform_allow: nrf5340_dk_nrf5340_cpuapp nrf5340_audio_dk_nrf5340_cpuapp
+    tags: nrf5340_audio_core_app_debug
+    extra_args: "CMAKE_BUILD_TYPE=DEBUG"
+  test_nrf5340_audio_core_app_release:
+    build_only: true
+    platform_allow: nrf5340_dk_nrf5340_cpuapp nrf5340_audio_dk_nrf5340_cpuapp
+    tags: nrf5340_audio_core_app_release
+    extra_args: "CMAKE_BUILD_TYPE=RELEASE"
