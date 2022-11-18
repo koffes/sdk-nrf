@@ -115,6 +115,7 @@ Kconfig*                                  @tejlmand
 /lib/modem_jwt/                           @jayteemo @SeppoTakalo
 /lib/modem_attest_token/                  @jayteemo
 /lib/qos/                                 @simensrostad
+/lib/contin_array/                        @koffes @alexsven @erikrobstad @rick1082 @gWacey
 /modules/                                 @tejlmand
 /modules/mcuboot/                         @nvlsianpu
 /modules/cjson/                           @simensrostad @plskeggs @sigvartmh
