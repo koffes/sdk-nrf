@@ -285,7 +285,7 @@ static int initialize(void)
 
 	for (size_t i = 0; i < ARRAY_SIZE(stream_params); i++) {
 		stream_params[i].stream = &audio_streams[i];
-		bt_audio_stream_cb_register(stream_params[i].stream, &stream_ops);
+		bt_bap_stream_cb_register(stream_params[i].stream, &stream_ops);
 		stream_params[i].data_count = 1U;
 		stream_params[i].data = &bis_codec_data;
 	}

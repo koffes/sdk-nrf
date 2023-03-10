@@ -453,11 +453,11 @@ static void stream_start_cb(struct bt_bap_stream *stream)
 	LOG_INF("Stream started");
 }
 
-static void stream_stop_cb(struct bt_bap_stream *stream)
+static void stream_stop_cb(struct bt_bap_stream *stream, uint8_t reason)
 {
 	int ret;
 
-	LOG_INF("Stream stopped");
+	LOG_INF("Stream stopped. Reason: %d", reason);
 #if CONFIG_STREAM_BIDIRECTIONAL
 	atomic_clear(&iso_tx_pool_alloc);
 #endif /* CONFIG_STREAM_BIDIRECTIONAL */
@@ -554,7 +554,7 @@ static int initialize(le_audio_receive_cb recv_cb)
 	static bool initialized;
 
 	if (!initialized) {
-		bt_audio_unicast_server_register_cb(&unicast_server_cb);
+		bt_bap_unicast_server_register_cb(&unicast_server_cb);
 		bt_conn_cb_register(&conn_callbacks);
 #if (CONFIG_BT_VCP_VOL_REND)
 		ret = ble_vcs_server_init();
@@ -649,7 +649,7 @@ static int initialize(le_audio_receive_cb recv_cb)
 		}
 #endif /* CONFIG_STREAM_BIDIRECTIONAL */
 		for (int i = 0; i < ARRAY_SIZE(audio_streams); i++) {
-			bt_audio_stream_cb_register(&audio_streams[i], &stream_ops);
+			bt_bap_stream_cb_register(&audio_streams[i], &stream_ops);
 		}
 
 		ret = bt_cap_acceptor_register(&csip_param, &csip);

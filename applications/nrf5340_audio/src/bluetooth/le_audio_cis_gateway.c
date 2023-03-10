@@ -9,7 +9,6 @@
 #include <zephyr/bluetooth/bluetooth.h>
 #include <zephyr/bluetooth/audio/audio.h>
 #include <zephyr/bluetooth/hci.h>
-#include <../subsys/bluetooth/audio/endpoint.h>
 #include <../subsys/bluetooth/audio/audio_iso.h>
 
 #include "macros_common.h"

@@ -29,11 +29,11 @@ LOG_MODULE_REGISTER(CS47L63, CONFIG_CS47L63_LOG_LEVEL);
 #define CS47L63_PROCESS_THREAD_DELAY_MS 10
 
 static const struct gpio_dt_spec hw_codec_gpio =
-	GPIO_DT_INST_SPEC_GET(0, gpio9_gpios);
+	GPIO_DT_SPEC_INST_GET(0, gpio9_gpios);
 static const struct gpio_dt_spec hw_codec_irq =
-	GPIO_DT_INST_SPEC_GET(0, irq);
+	GPIO_DT_SPEC_INST_GET(0, irq_gpios);
 static const struct gpio_dt_spec hw_codec_reset =
-	GPIO_DT_INST_SPEC_GET(0, reset_gpios);
+	GPIO_DT_SPEC_INST_GET(0, reset_gpios);
 
 const static struct device *gpio_dev = DEVICE_DT_GET(DT_NODELABEL(gpio0));
 
@@ -69,7 +69,7 @@ static void spi_mutex_lock(void)
 	/* If operation mode set to HOLD or the SPI_LOCK_ON is set when
 	 * taking the mutex something is wrong
 	 */
-	if ((config.operation & SPI_HOLD_ON_CS) || (config.operation & SPI_LOCK_ON)) {
+	if ((spi.config.operation & SPI_HOLD_ON_CS) || (spi.config.operation & SPI_LOCK_ON)) {
 		ERR_CHK_MSG(-EPERM,
 			    "SPI_HOLD_ON_CS and SPI_LOCK_ON must be freed before releasing mutex");
 	}
@@ -82,7 +82,7 @@ static void spi_mutex_unlock(void)
 	 * the SPI_LOCK_ON is still set when releasing the mutex
 	 * something is wrong
 	 */
-	if ((config.operation & SPI_HOLD_ON_CS) || (config.operation & SPI_LOCK_ON)) {
+	if ((spi.config.operation & SPI_HOLD_ON_CS) || (spi.config.operation & SPI_LOCK_ON)) {
 		ERR_CHK_MSG(-EPERM,
 			    "SPI_HOLD_ON_CS and SPI_LOCK_ON must be freed before releasing mutex");
 	}
@@ -315,7 +315,7 @@ int cs47l63_comm_init(cs47l63_t *cs47l63_driver)
 		return -ENXIO;
 	}
 
-	if (!gpio_is_ready(&hw_codec_gpio)) {
+	if (!gpio_is_ready_dt(&hw_codec_gpio)) {
 		LOG_ERR("GPIO is not ready!");
 		return -ENXIO;
 	}
@@ -325,7 +325,7 @@ int cs47l63_comm_init(cs47l63_t *cs47l63_driver)
 		return ret;
 	}
 
-	if (!gpio_is_ready(&hw_codec_irq)) {
+	if (!gpio_is_ready_dt(&hw_codec_irq)) {
 		LOG_ERR("GPIO is not ready!");
 		return -ENXIO;
 	}
@@ -335,7 +335,7 @@ int cs47l63_comm_init(cs47l63_t *cs47l63_driver)
 		return ret;
 	}
 
-	if (!gpio_is_ready(&hw_codec_reset)) {
+	if (!gpio_is_ready_dt(&hw_codec_reset)) {
 		LOG_ERR("GPIO is not ready!");
 		return -ENXIO;
 	}
