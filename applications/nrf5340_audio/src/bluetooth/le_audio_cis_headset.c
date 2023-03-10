@@ -756,7 +756,7 @@ int le_audio_send(struct encoded_audio enc_audio)
 	}
 
 	/* CIS headset only supports one source stream for now */
-	if (sources[0].stream->ep->status.state != BT_AUDIO_EP_STATE_STREAMING) {
+	if (sources[0].stream->ep->status.state != BT_BAP_EP_STATE_STREAMING) {
 		LOG_DBG("Return channel not connected");
 		return 0;
 	}
@@ -791,7 +791,7 @@ int le_audio_send(struct encoded_audio enc_audio)
 	net_buf_add_mem(buf, enc_audio.data, enc_audio.size);
 
 	atomic_inc(&iso_tx_pool_alloc);
-	ret = bt_audio_stream_send(sources[0].stream, buf, sources[0].seq_num++,
+	ret = bt_bap_stream_send(sources[0].stream, buf, sources[0].seq_num++,
 				   BT_ISO_TIMESTAMP_NONE);
 	if (ret < 0) {
 		LOG_WRN("Failed to send audio data: %d", ret);

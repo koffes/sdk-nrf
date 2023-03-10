@@ -8,9 +8,11 @@
 
 #include <zephyr/bluetooth/bluetooth.h>
 #include <zephyr/bluetooth/audio/audio.h>
+#include <zephyr/bluetooth/audio/bap_lc3_preset.h>
 /* TODO: Remove when a get_info function is implemented in host */
-#include <../subsys/bluetooth/audio/endpoint.h>
-#include <../subsys/bluetooth/audio/audio_iso.h>
+#include <../subsys/bluetooth/audio/bap_endpoint.h>
+#include <../subsys/bluetooth/audio/bap_iso.h>
+
 
 #include "macros_common.h"
 #include "ctrl_events.h"
@@ -43,7 +45,7 @@ static struct bt_audio_broadcast_source *broadcast_source;
 
 static struct bt_bap_stream audio_streams[CONFIG_BT_AUDIO_BROADCAST_SRC_STREAM_COUNT];
 
-static struct bt_audio_lc3_preset lc3_preset = BT_AUDIO_LC3_BROADCAST_PRESET_NRF5340_AUDIO;
+static struct bt_bap_lc3_preset lc3_preset = BT_BAP_LC3_BROADCAST_PRESET_NRF5340_AUDIO;
 
 static atomic_t iso_tx_pool_alloc[CONFIG_BT_AUDIO_BROADCAST_SRC_STREAM_COUNT];
 static bool delete_broadcast_src;
@@ -117,7 +119,7 @@ static void stream_started_cb(struct bt_bap_stream *stream)
 	LOG_INF("Broadcast source %p started", (void *)stream);
 }
 
-static void stream_stopped_cb(struct bt_bap_stream *stream)
+static void stream_stopped_cb(struct bt_bap_stream *stream, uint8_t reason)
 {
 	int ret;
 
@@ -384,7 +386,7 @@ int le_audio_play_pause(void)
 		return -ECANCELED;
 	}
 
-	if (audio_streams[0].ep->status.state == BT_AUDIO_EP_STATE_STREAMING) {
+	if (audio_streams[0].ep->status.state == BT_BAP_EP_STATE_STREAMING) {
 		ret = bt_audio_broadcast_source_stop(broadcast_source);
 		if (ret) {
 			LOG_WRN("Failed to stop broadcast, ret: %d", ret);
@@ -420,7 +422,7 @@ int le_audio_send(struct encoded_audio enc_audio)
 	}
 
 	for (int i = 0; i < num_streams; i++) {
-		if (audio_streams[i].ep->status.state != BT_AUDIO_EP_STATE_STREAMING) {
+		if (audio_streams[i].ep->status.state != BT_BAP_EP_STATE_STREAMING) {
 			LOG_DBG("Stream %d not in streaming state", i);
 			continue;
 		}
@@ -453,7 +455,7 @@ int le_audio_send(struct encoded_audio enc_audio)
 
 		atomic_inc(&iso_tx_pool_alloc[i]);
 
-		ret = bt_audio_stream_send(&audio_streams[i], buf, seq_num[i]++,
+		ret = bt_bap_stream_send(&audio_streams[i], buf, seq_num[i]++,
 					   BT_ISO_TIMESTAMP_NONE);
 		if (ret < 0) {
 			LOG_WRN("Failed to send audio data: %d", ret);
@@ -522,7 +524,7 @@ int le_audio_disable(void)
 {
 	int ret;
 
-	if (audio_streams[0].ep->status.state == BT_AUDIO_EP_STATE_STREAMING) {
+	if (audio_streams[0].ep->status.state == BT_BAP_EP_STATE_STREAMING) {
 		/* Deleting broadcast source in stream_stopped_cb() */
 		delete_broadcast_src = true;
 

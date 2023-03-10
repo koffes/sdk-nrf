@@ -150,7 +150,7 @@ static void stream_started_cb(struct bt_bap_stream *stream)
 	LOG_INF("Stream index %d started", active_stream_index);
 }
 
-static void stream_stopped_cb(struct bt_bap_stream *stream)
+static void stream_stopped_cb(struct bt_bap_stream *stream, uint8_t reason)
 {
 	int ret;
 
@@ -332,7 +332,7 @@ static void syncable_cb(struct bt_audio_broadcast_sink *sink, bool encrypted)
 	strncpy(bis_encryption_key, CONFIG_BT_AUDIO_BROADCAST_ENCRYPTION_KEY, 16);
 #endif /* (CONFIG_BT_AUDIO_BROADCAST_ENCRYPTED) */
 
-	if (active_stream.stream->ep->status.state == BT_AUDIO_EP_STATE_STREAMING ||
+	if (active_stream.stream->ep->status.state == BT_BAP_EP_STATE_STREAMING ||
 	    !playing_state) {
 		LOG_DBG("Syncable received, but either in paused_state or already in a stream");
 		return;
@@ -520,7 +520,7 @@ int le_audio_config_get(uint32_t *bitrate, uint32_t *sampling_rate)
 
 int le_audio_volume_up(void)
 {
-	if (active_stream.stream->ep->status.state != BT_AUDIO_EP_STATE_STREAMING) {
+	if (active_stream.stream->ep->status.state != BT_BAP_EP_STATE_STREAMING) {
 		return -ECANCELED;
 	}
 
@@ -529,7 +529,7 @@ int le_audio_volume_up(void)
 
 int le_audio_volume_down(void)
 {
-	if (active_stream.stream->ep->status.state != BT_AUDIO_EP_STATE_STREAMING) {
+	if (active_stream.stream->ep->status.state != BT_BAP_EP_STATE_STREAMING) {
 		return -ECANCELED;
 	}
 
@@ -538,7 +538,7 @@ int le_audio_volume_down(void)
 
 int le_audio_volume_mute(void)
 {
-	if (active_stream.stream->ep->status.state != BT_AUDIO_EP_STATE_STREAMING) {
+	if (active_stream.stream->ep->status.state != BT_BAP_EP_STATE_STREAMING) {
 		return -ECANCELED;
 	}
 
