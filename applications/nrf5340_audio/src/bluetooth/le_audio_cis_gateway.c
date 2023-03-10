@@ -44,11 +44,11 @@ struct le_audio_headset {
 	char *ch_name;
 	bool hci_wrn_printed;
 	uint32_t seq_num;
-	struct bt_audio_stream sink_stream;
-	struct bt_audio_ep *sink_ep;
+	struct bt_bap_stream sink_stream;
+	struct bt_bap_ep *sink_ep;
 	struct bt_codec *sink_codec_cap[CONFIG_BT_AUDIO_UNICAST_CLIENT_PAC_COUNT];
-	struct bt_audio_stream source_stream;
-	struct bt_audio_ep *source_ep;
+	struct bt_bap_stream source_stream;
+	struct bt_bap_ep *source_ep;
 	struct bt_codec *source_codec_cap[CONFIG_BT_AUDIO_UNICAST_CLIENT_PAC_COUNT];
 	struct bt_conn *headset_conn;
 	struct net_buf_pool *iso_tx_pool;
@@ -119,7 +119,7 @@ static int discover_source(struct bt_conn *conn);
  *
  * @return True if the endpoint is in the given state, false otherwise
  */
-static bool ep_state_check(struct bt_audio_ep *ep, enum bt_audio_state state)
+static bool ep_state_check(struct bt_bap_ep *ep, enum bt_audio_state state)
 {
 	if (ep == NULL) {
 		LOG_DBG("Endpoint is NULL");
@@ -160,7 +160,7 @@ static int channel_index_get(const struct bt_conn *conn, uint8_t *index)
 	return -EINVAL;
 }
 
-static uint32_t get_and_incr_seq_num(const struct bt_audio_stream *stream)
+static uint32_t get_and_incr_seq_num(const struct bt_bap_stream *stream)
 {
 	uint8_t channel_index;
 
@@ -214,7 +214,7 @@ const struct bt_audio_unicast_client_cb unicast_client_cbs = {
 	.available_contexts = available_contexts_cb,
 };
 
-static void stream_sent_cb(struct bt_audio_stream *stream)
+static void stream_sent_cb(struct bt_bap_stream *stream)
 {
 	int ret;
 	uint8_t channel_index;
@@ -227,7 +227,7 @@ static void stream_sent_cb(struct bt_audio_stream *stream)
 	}
 }
 
-static void stream_configured_cb(struct bt_audio_stream *stream,
+static void stream_configured_cb(struct bt_bap_stream *stream,
 				 const struct bt_codec_qos_pref *pref)
 {
 	int ret;
@@ -262,7 +262,7 @@ static void stream_configured_cb(struct bt_audio_stream *stream,
 	}
 }
 
-static void stream_qos_set_cb(struct bt_audio_stream *stream)
+static void stream_qos_set_cb(struct bt_bap_stream *stream)
 {
 	int ret;
 
@@ -277,7 +277,7 @@ static void stream_qos_set_cb(struct bt_audio_stream *stream)
 	}
 }
 
-static void stream_enabled_cb(struct bt_audio_stream *stream)
+static void stream_enabled_cb(struct bt_bap_stream *stream)
 {
 	int ret;
 	uint8_t channel_index;
@@ -331,7 +331,7 @@ static void stream_enabled_cb(struct bt_audio_stream *stream)
 #endif /* CONFIG_STREAM_BIDIRECTIONAL */
 }
 
-static void stream_started_cb(struct bt_audio_stream *stream)
+static void stream_started_cb(struct bt_bap_stream *stream)
 {
 	int ret;
 	uint8_t channel_index;
@@ -347,17 +347,17 @@ static void stream_started_cb(struct bt_audio_stream *stream)
 	ERR_CHK(ret);
 }
 
-static void stream_metadata_updated_cb(struct bt_audio_stream *stream)
+static void stream_metadata_updated_cb(struct bt_bap_stream *stream)
 {
 	LOG_DBG("Audio Stream %p metadata updated", (void *)stream);
 }
 
-static void stream_disabled_cb(struct bt_audio_stream *stream)
+static void stream_disabled_cb(struct bt_bap_stream *stream)
 {
 	LOG_DBG("Audio Stream %p disabled", (void *)stream);
 }
 
-static void stream_stopped_cb(struct bt_audio_stream *stream)
+static void stream_stopped_cb(struct bt_bap_stream *stream)
 {
 	int ret;
 	uint8_t channel_index;
@@ -379,7 +379,7 @@ static void stream_stopped_cb(struct bt_audio_stream *stream)
 	}
 }
 
-static void stream_released_cb(struct bt_audio_stream *stream)
+static void stream_released_cb(struct bt_bap_stream *stream)
 {
 	int ret;
 	LOG_DBG("Audio Stream %p released", (void *)stream);
@@ -391,7 +391,7 @@ static void stream_released_cb(struct bt_audio_stream *stream)
 	}
 }
 
-static void stream_recv_cb(struct bt_audio_stream *stream, const struct bt_iso_recv_info *info,
+static void stream_recv_cb(struct bt_bap_stream *stream, const struct bt_iso_recv_info *info,
 			   struct net_buf *buf)
 {
 	int ret;
@@ -416,7 +416,7 @@ static void stream_recv_cb(struct bt_audio_stream *stream, const struct bt_iso_r
 	receive_cb(buf->data, buf->len, bad_frame, info->ts, channel_index);
 }
 
-static struct bt_audio_stream_ops stream_ops = {
+static struct bt_bap_stream_ops stream_ops = {
 	.sent = stream_sent_cb,
 	.configured = stream_configured_cb,
 	.qos_set = stream_qos_set_cb,
@@ -536,7 +536,7 @@ static bool valid_codec_cap_check(struct bt_codec *cap_array[], size_t size)
 	return false;
 }
 
-static void discover_sink_cb(struct bt_conn *conn, struct bt_codec *codec, struct bt_audio_ep *ep,
+static void discover_sink_cb(struct bt_conn *conn, struct bt_codec *codec, struct bt_bap_ep *ep,
 			     struct bt_audio_discover_params *params)
 {
 	int ret = 0;
@@ -636,7 +636,7 @@ static void discover_sink_cb(struct bt_conn *conn, struct bt_codec *codec, struc
 }
 
 #if CONFIG_STREAM_BIDIRECTIONAL
-static void discover_source_cb(struct bt_conn *conn, struct bt_codec *codec, struct bt_audio_ep *ep,
+static void discover_source_cb(struct bt_conn *conn, struct bt_codec *codec, struct bt_bap_ep *ep,
 			       struct bt_audio_discover_params *params)
 {
 	int ret = 0;

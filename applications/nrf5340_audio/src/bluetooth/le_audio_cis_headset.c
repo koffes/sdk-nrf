@@ -14,7 +14,6 @@
 #include <zephyr/bluetooth/audio/pacs.h>
 #include <zephyr/bluetooth/audio/csip.h>
 #include <zephyr/bluetooth/audio/cap.h>
-#include <../subsys/bluetooth/audio/endpoint.h>
 
 #include "macros_common.h"
 #include "ctrl_events.h"
@@ -127,14 +126,14 @@ static struct bt_pacs_cap caps[] = {
 
 static struct k_work adv_work;
 static struct bt_conn *default_conn;
-static struct bt_audio_stream
+static struct bt_bap_stream
 	audio_streams[CONFIG_BT_ASCS_ASE_SNK_COUNT + CONFIG_BT_ASCS_ASE_SRC_COUNT];
 
 #if CONFIG_STREAM_BIDIRECTIONAL
 BUILD_ASSERT(CONFIG_BT_ASCS_ASE_SRC_COUNT <= 1,
 	     "CIS headset only supports one source stream for now");
 static struct bt_audio_source {
-	struct bt_audio_stream *stream;
+	struct bt_bap_stream *stream;
 	uint32_t seq_num;
 } sources[CONFIG_BT_ASCS_ASE_SRC_COUNT];
 #endif /* CONFIG_STREAM_BIDIRECTIONAL */
@@ -263,14 +262,14 @@ static void advertising_start(void)
 	k_work_submit(&adv_work);
 }
 
-static int lc3_config_cb(struct bt_conn *conn, const struct bt_audio_ep *ep, enum bt_audio_dir dir,
-			 const struct bt_codec *codec, struct bt_audio_stream **stream,
+static int lc3_config_cb(struct bt_conn *conn, const struct bt_bap_ep *ep, enum bt_audio_dir dir,
+			 const struct bt_codec *codec, struct bt_bap_stream **stream,
 			 struct bt_codec_qos_pref *const pref)
 {
 	int ret;
 
 	for (int i = 0; i < ARRAY_SIZE(audio_streams); i++) {
-		struct bt_audio_stream *audio_stream = &audio_streams[i];
+		struct bt_bap_stream *audio_stream = &audio_streams[i];
 
 		if (!audio_stream->conn) {
 			LOG_DBG("ASE Codec Config stream %p", (void *)audio_stream);
@@ -316,7 +315,7 @@ static int lc3_config_cb(struct bt_conn *conn, const struct bt_audio_ep *ep, enu
 	return -ENOMEM;
 }
 
-static int lc3_reconfig_cb(struct bt_audio_stream *stream, enum bt_audio_dir dir,
+static int lc3_reconfig_cb(struct bt_bap_stream *stream, enum bt_audio_dir dir,
 			   const struct bt_codec *codec, struct bt_codec_qos_pref *const pref)
 {
 	LOG_DBG("ASE Codec Reconfig: stream %p", (void *)stream);
@@ -324,7 +323,7 @@ static int lc3_reconfig_cb(struct bt_audio_stream *stream, enum bt_audio_dir dir
 	return 0;
 }
 
-static int lc3_qos_cb(struct bt_audio_stream *stream, const struct bt_codec_qos *qos)
+static int lc3_qos_cb(struct bt_bap_stream *stream, const struct bt_codec_qos *qos)
 {
 	int ret;
 
@@ -335,7 +334,7 @@ static int lc3_qos_cb(struct bt_audio_stream *stream, const struct bt_codec_qos 
 	return ret;
 }
 
-static int lc3_enable_cb(struct bt_audio_stream *stream, const struct bt_codec_data *meta,
+static int lc3_enable_cb(struct bt_bap_stream *stream, const struct bt_codec_data *meta,
 			 size_t meta_count)
 {
 	int ret;
@@ -358,20 +357,20 @@ static int lc3_enable_cb(struct bt_audio_stream *stream, const struct bt_codec_d
 	return 0;
 }
 
-static int lc3_start_cb(struct bt_audio_stream *stream)
+static int lc3_start_cb(struct bt_bap_stream *stream)
 {
 	LOG_DBG("Stream started %p", (void *)stream);
 	return 0;
 }
 
-static int lc3_metadata_cb(struct bt_audio_stream *stream, const struct bt_codec_data *meta,
+static int lc3_metadata_cb(struct bt_bap_stream *stream, const struct bt_codec_data *meta,
 			   size_t meta_count)
 {
 	LOG_DBG("Metadata: stream %p meta_count %d", (void *)stream, meta_count);
 	return 0;
 }
 
-static int lc3_disable_cb(struct bt_audio_stream *stream)
+static int lc3_disable_cb(struct bt_bap_stream *stream)
 {
 	int ret;
 
@@ -383,7 +382,7 @@ static int lc3_disable_cb(struct bt_audio_stream *stream)
 	return 0;
 }
 
-static int lc3_stop_cb(struct bt_audio_stream *stream)
+static int lc3_stop_cb(struct bt_bap_stream *stream)
 {
 	int ret;
 
@@ -395,7 +394,7 @@ static int lc3_stop_cb(struct bt_audio_stream *stream)
 	return 0;
 }
 
-static int lc3_release_cb(struct bt_audio_stream *stream)
+static int lc3_release_cb(struct bt_bap_stream *stream)
 {
 	int ret;
 
@@ -407,7 +406,7 @@ static int lc3_release_cb(struct bt_audio_stream *stream)
 	return 0;
 }
 
-static const struct bt_audio_unicast_server_cb unicast_server_cb = {
+static const struct bt_bap_unicast_server_cb unicast_server_cb = {
 	.config = lc3_config_cb,
 	.reconfig = lc3_reconfig_cb,
 	.qos = lc3_qos_cb,
@@ -419,14 +418,14 @@ static const struct bt_audio_unicast_server_cb unicast_server_cb = {
 	.release = lc3_release_cb,
 };
 
-static void stream_sent_cb(struct bt_audio_stream *stream)
+static void stream_sent_cb(struct bt_bap_stream *stream)
 {
 #if CONFIG_STREAM_BIDIRECTIONAL
 	atomic_dec(&iso_tx_pool_alloc);
 #endif /* CONFIG_STREAM_BIDIRECTIONAL */
 }
 
-static void stream_recv_cb(struct bt_audio_stream *stream, const struct bt_iso_recv_info *info,
+static void stream_recv_cb(struct bt_bap_stream *stream, const struct bt_iso_recv_info *info,
 			   struct net_buf *buf)
 {
 	static uint32_t recv_cnt;
@@ -449,12 +448,12 @@ static void stream_recv_cb(struct bt_audio_stream *stream, const struct bt_iso_r
 	}
 }
 
-static void stream_start_cb(struct bt_audio_stream *stream)
+static void stream_start_cb(struct bt_bap_stream *stream)
 {
 	LOG_INF("Stream started");
 }
 
-static void stream_stop_cb(struct bt_audio_stream *stream)
+static void stream_stop_cb(struct bt_bap_stream *stream)
 {
 	int ret;
 
@@ -544,7 +543,7 @@ static struct bt_conn_cb conn_callbacks = {
 	.security_changed = security_changed_cb,
 };
 
-static struct bt_audio_stream_ops stream_ops = { .recv = stream_recv_cb,
+static struct bt_bap_stream_ops stream_ops = { .recv = stream_recv_cb,
 						 .sent = stream_sent_cb,
 						 .started = stream_start_cb,
 						 .stopped = stream_stop_cb };

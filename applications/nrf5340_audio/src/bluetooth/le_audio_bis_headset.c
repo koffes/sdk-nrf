@@ -37,7 +37,7 @@ struct audio_codec_info {
 };
 
 struct active_audio_stream {
-	struct bt_audio_stream *stream;
+	struct bt_bap_stream *stream;
 	struct audio_codec_info *codec;
 	uint8_t brdcast_src_name_idx;
 };
@@ -52,8 +52,8 @@ static const char *const brdcast_src_names[] = { CONFIG_BT_AUDIO_BROADCAST_NAME,
 
 static struct bt_audio_broadcast_sink *broadcast_sink;
 
-static struct bt_audio_stream audio_streams[CONFIG_BT_AUDIO_BROADCAST_SNK_STREAM_COUNT];
-static struct bt_audio_stream *audio_streams_p[ARRAY_SIZE(audio_streams)];
+static struct bt_bap_stream audio_streams[CONFIG_BT_AUDIO_BROADCAST_SNK_STREAM_COUNT];
+static struct bt_bap_stream *audio_streams_p[ARRAY_SIZE(audio_streams)];
 static struct audio_codec_info audio_codec_info[CONFIG_BT_AUDIO_BROADCAST_SNK_STREAM_COUNT];
 static uint32_t bis_index_bitfields[CONFIG_BT_AUDIO_BROADCAST_SNK_STREAM_COUNT];
 
@@ -140,7 +140,7 @@ static bool adv_data_parse(struct bt_data *data, void *user_data)
 	return true;
 }
 
-static void stream_started_cb(struct bt_audio_stream *stream)
+static void stream_started_cb(struct bt_bap_stream *stream)
 {
 	int ret;
 
@@ -150,7 +150,7 @@ static void stream_started_cb(struct bt_audio_stream *stream)
 	LOG_INF("Stream index %d started", active_stream_index);
 }
 
-static void stream_stopped_cb(struct bt_audio_stream *stream)
+static void stream_stopped_cb(struct bt_bap_stream *stream)
 {
 	int ret;
 
@@ -160,7 +160,7 @@ static void stream_stopped_cb(struct bt_audio_stream *stream)
 	LOG_INF("Stream index %d stopped", active_stream_index);
 }
 
-static void stream_recv_cb(struct bt_audio_stream *stream, const struct bt_iso_recv_info *info,
+static void stream_recv_cb(struct bt_bap_stream *stream, const struct bt_iso_recv_info *info,
 			   struct net_buf *buf)
 {
 	static uint32_t recv_cnt;
@@ -184,7 +184,7 @@ static void stream_recv_cb(struct bt_audio_stream *stream, const struct bt_iso_r
 	}
 }
 
-static struct bt_audio_stream_ops stream_ops = { .started = stream_started_cb,
+static struct bt_bap_stream_ops stream_ops = { .started = stream_started_cb,
 						 .stopped = stream_stopped_cb,
 						 .recv = stream_recv_cb };
 

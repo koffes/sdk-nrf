@@ -41,7 +41,7 @@ static struct net_buf_pool *iso_tx_pools[] = { LISTIFY(CONFIG_BT_AUDIO_BROADCAST
 
 static struct bt_audio_broadcast_source *broadcast_source;
 
-static struct bt_audio_stream audio_streams[CONFIG_BT_AUDIO_BROADCAST_SRC_STREAM_COUNT];
+static struct bt_bap_stream audio_streams[CONFIG_BT_AUDIO_BROADCAST_SRC_STREAM_COUNT];
 
 static struct bt_audio_lc3_preset lc3_preset = BT_AUDIO_LC3_BROADCAST_PRESET_NRF5340_AUDIO;
 
@@ -69,7 +69,7 @@ static bool is_iso_buffer_full(uint8_t idx)
 	return false;
 }
 
-static int get_stream_index(struct bt_audio_stream *stream, uint8_t *index)
+static int get_stream_index(struct bt_bap_stream *stream, uint8_t *index)
 {
 	for (int i = 0; i < ARRAY_SIZE(audio_streams); i++) {
 		if (&audio_streams[i] == stream) {
@@ -83,7 +83,7 @@ static int get_stream_index(struct bt_audio_stream *stream, uint8_t *index)
 	return -EINVAL;
 }
 
-static void stream_sent_cb(struct bt_audio_stream *stream)
+static void stream_sent_cb(struct bt_bap_stream *stream)
 {
 	static uint32_t sent_cnt[ARRAY_SIZE(audio_streams)];
 	uint8_t index = 0;
@@ -103,7 +103,7 @@ static void stream_sent_cb(struct bt_audio_stream *stream)
 	}
 }
 
-static void stream_started_cb(struct bt_audio_stream *stream)
+static void stream_started_cb(struct bt_bap_stream *stream)
 {
 	int ret;
 	uint8_t index = 0;
@@ -117,7 +117,7 @@ static void stream_started_cb(struct bt_audio_stream *stream)
 	LOG_INF("Broadcast source %p started", (void *)stream);
 }
 
-static void stream_stopped_cb(struct bt_audio_stream *stream)
+static void stream_stopped_cb(struct bt_bap_stream *stream)
 {
 	int ret;
 
@@ -142,7 +142,7 @@ static void stream_stopped_cb(struct bt_audio_stream *stream)
 	}
 }
 
-static struct bt_audio_stream_ops stream_ops = { .sent = stream_sent_cb,
+static struct bt_bap_stream_ops stream_ops = { .sent = stream_sent_cb,
 						 .started = stream_started_cb,
 						 .stopped = stream_stopped_cb };
 
