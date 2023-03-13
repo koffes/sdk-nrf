@@ -44,7 +44,7 @@ LISTIFY(CONFIG_BT_ASCS_ASE_SRC_COUNT, NET_BUF_POOL_ITERATE, (;))
 static atomic_t iso_tx_pool_alloc;
 /* clang-format off */
 static struct net_buf_pool *iso_tx_pools[] = { LISTIFY(CONFIG_BT_ASCS_ASE_SRC_COUNT,
-						       NET_BUF_POOL_PTR_ITERATE, (,)) };
+							   NET_BUF_POOL_PTR_ITERATE, (,)) };
 /* clang-format on */
 #endif /* CONFIG_STREAM_BIDIRECTIONAL */
 
@@ -87,7 +87,7 @@ struct bt_csip_set_member_register_param csip_param = {
 #if !CONFIG_BT_CSIP_SET_MEMBER_TEST_SAMPLE_DATA
 	/* CSIP SIRK for demo is used, must be changed before production */
 	.set_sirk = { 'N', 'R', 'F', '5', '3', '4', '0', '_', 'T', 'W', 'S', '_', 'D', 'E', 'M',
-		      'O' },
+			  'O' },
 #else
 #warning "CSIP test sample data is used, must be changed before production"
 #endif
@@ -114,11 +114,11 @@ static const struct bt_codec_qos_pref qos_pref =
 /* clang-format off */
 static struct bt_pacs_cap caps[] = {
 				{
-				     .codec = &lc3_codec,
+					 .codec = &lc3_codec,
 				},
 #if CONFIG_STREAM_BIDIRECTIONAL
 				{
-				     .codec = &lc3_codec,
+					 .codec = &lc3_codec,
 				}
 #endif /* CONFIG_STREAM_BIDIRECTIONAL */
 };
@@ -131,7 +131,7 @@ static struct bt_bap_stream
 
 #if CONFIG_STREAM_BIDIRECTIONAL
 BUILD_ASSERT(CONFIG_BT_ASCS_ASE_SRC_COUNT <= 1,
-	     "CIS headset only supports one source stream for now");
+		 "CIS headset only supports one source stream for now");
 static struct bt_audio_source {
 	struct bt_bap_stream *stream;
 	uint32_t seq_num;
@@ -453,6 +453,23 @@ static void stream_start_cb(struct bt_bap_stream *stream)
 	LOG_INF("Stream started");
 }
 
+static void stream_enabled_cb(struct bt_bap_stream *stream)
+{
+	LOG_INF("Stream enabled");
+	int ret;
+
+	if (stream->dir == BT_AUDIO_DIR_SINK) {
+		/* Automatically do the receiver start ready operation */
+		ret = bt_bap_stream_start(stream);
+		if (ret != 0) {
+			LOG_ERR("Failed to start stream: %d", ret);
+			return;
+		}
+	}
+}
+
+/* TODO: Add all callbacks */
+
 static void stream_stop_cb(struct bt_bap_stream *stream, uint8_t reason)
 {
 	int ret;
@@ -545,6 +562,7 @@ static struct bt_conn_cb conn_callbacks = {
 
 static struct bt_bap_stream_ops stream_ops = { .recv = stream_recv_cb,
 						 .sent = stream_sent_cb,
+						 .enabled = stream_enabled_cb,
 						 .started = stream_start_cb,
 						 .stopped = stream_stop_cb };
 
@@ -603,21 +621,41 @@ static int initialize(le_audio_receive_cb recv_cb)
 			return -ECANCELED;
 		}
 #if CONFIG_STREAM_BIDIRECTIONAL
-		ret = bt_pacs_set_available_contexts(BT_AUDIO_DIR_SINK,
-						     BT_AUDIO_CONTEXT_TYPE_MEDIA |
-							     BT_AUDIO_CONTEXT_TYPE_CONVERSATIONAL |
-							     BT_AUDIO_CONTEXT_TYPE_UNSPECIFIED);
+		ret = bt_pacs_set_supported_contexts(BT_AUDIO_DIR_SINK,
+				BT_AUDIO_CONTEXT_TYPE_MEDIA |
+				BT_AUDIO_CONTEXT_TYPE_CONVERSATIONAL |
+				BT_AUDIO_CONTEXT_TYPE_UNSPECIFIED);
+
 		if (ret) {
-			LOG_ERR("Available context set failed");
+			LOG_ERR("Supported context set failed. Err: %d", ret);
+			return ret;
+		}
+
+		ret = bt_pacs_set_available_contexts(BT_AUDIO_DIR_SINK,
+				BT_AUDIO_CONTEXT_TYPE_MEDIA |
+				BT_AUDIO_CONTEXT_TYPE_CONVERSATIONAL |
+				BT_AUDIO_CONTEXT_TYPE_UNSPECIFIED);
+		if (ret) {
+			LOG_ERR("Available context set failed. Err%d: %d", ret);
+			return ret;
+		}
+
+		ret = bt_pacs_set_supported_contexts(BT_AUDIO_DIR_SOURCE,
+				BT_AUDIO_CONTEXT_TYPE_MEDIA |
+				BT_AUDIO_CONTEXT_TYPE_CONVERSATIONAL |
+				BT_AUDIO_CONTEXT_TYPE_UNSPECIFIED);
+
+		if (ret) {
+			LOG_ERR("Supported context set failed. Err: %d", ret);
 			return ret;
 		}
 
 		ret = bt_pacs_set_available_contexts(BT_AUDIO_DIR_SOURCE,
-						     BT_AUDIO_CONTEXT_TYPE_MEDIA |
-							     BT_AUDIO_CONTEXT_TYPE_CONVERSATIONAL |
-							     BT_AUDIO_CONTEXT_TYPE_UNSPECIFIED);
+				BT_AUDIO_CONTEXT_TYPE_MEDIA |
+				BT_AUDIO_CONTEXT_TYPE_CONVERSATIONAL |
+				BT_AUDIO_CONTEXT_TYPE_UNSPECIFIED);
 		if (ret) {
-			LOG_ERR("Available context set failed");
+			LOG_ERR("Available context set failed. Err: %d", ret);
 			return ret;
 		}
 
@@ -640,11 +678,21 @@ static int initialize(le_audio_receive_cb recv_cb)
 			return -ECANCELED;
 		}
 #else
-		ret = bt_pacs_set_available_contexts(BT_AUDIO_DIR_SINK,
-						     BT_AUDIO_CONTEXT_TYPE_MEDIA |
-							     BT_AUDIO_CONTEXT_TYPE_UNSPECIFIED);
+
+		ret = bt_pacs_set_supported_contexts(BT_AUDIO_DIR_SINK,
+				BT_AUDIO_CONTEXT_TYPE_MEDIA |
+				BT_AUDIO_CONTEXT_TYPE_UNSPECIFIED);
+
 		if (ret) {
-			LOG_ERR("Available context set failed");
+			LOG_ERR("Supported context set failed. Err: %d ", ret);
+			return ret;
+		}
+
+		ret = bt_pacs_set_available_contexts(BT_AUDIO_DIR_SINK,
+				BT_AUDIO_CONTEXT_TYPE_MEDIA |
+				BT_AUDIO_CONTEXT_TYPE_UNSPECIFIED);
+		if (ret) {
+			LOG_ERR("Available context set failed. Err: %d", ret);
 			return ret;
 		}
 #endif /* CONFIG_STREAM_BIDIRECTIONAL */

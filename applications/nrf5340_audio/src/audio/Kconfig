@@ -93,7 +93,7 @@ config AUDIO_BIT_DEPTH_OCTETS
 choice AUDIO_SOURCE_GATEWAY
 	prompt "Audio source for gateway"
 	default AUDIO_SOURCE_I2S if WALKIE_TALKIE_DEMO
-	default AUDIO_SOURCE_USB
+	default AUDIO_SOURCE_I2S
 	help
 	  Select audio source for the gateway.
 
@@ -233,7 +233,7 @@ config WALKIE_TALKIE_DEMO
 config MONO_TO_ALL_RECEIVERS
 	bool "Send mono (first/left channel) to all receivers"
 	default y if BT_BAP_UNICAST_CLIENT_ASE_SNK_COUNT = 1
-	default y if BT_AUDIO_BROADCAST_SRC_STREAM_COUNT = 1
+	default y if BT_BAP_BROADCAST_SRC_STREAM_COUNT = 1
 	default n
 	help
 	  With this flag set, the gateway will encode and send the same (first/left)

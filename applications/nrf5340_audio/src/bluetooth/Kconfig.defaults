@@ -259,7 +259,7 @@ config BT_BAP_BROADCAST_SOURCE
 config BT_ISO_TX_BUF_COUNT
 	default 2
 
-config BT_AUDIO_BROADCAST_SRC_STREAM_COUNT
+config BT_BAP_BROADCAST_SRC_STREAM_COUNT
 	int "Number of broadcast source streams"
 	default 2
 

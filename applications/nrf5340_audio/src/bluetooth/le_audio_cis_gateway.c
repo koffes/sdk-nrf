@@ -534,6 +534,7 @@ static bool valid_codec_cap_check(struct bt_codec *cap_array[], size_t size)
 				return true;
 			}
 		}
+		LOG_WRN("no match %d and %d", element->data.data[0], BT_AUDIO_CODEC_CAPABILIY_FREQ);
 	}
 
 	return false;

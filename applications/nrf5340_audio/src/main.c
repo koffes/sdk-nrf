@@ -187,7 +187,7 @@ void main(void)
 	ERR_CHK(ret);
 
 	if (board_rev.mask & BOARD_VERSION_VALID_MSK_SD_CARD) {
-		ret = sd_card_init();
+		/* ret = sd_card_init(); */
 		if (ret != -ENODEV) {
 			ERR_CHK(ret);
 		}
