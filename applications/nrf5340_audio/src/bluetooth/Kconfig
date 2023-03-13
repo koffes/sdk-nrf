@@ -275,28 +275,28 @@ config BT_AUDIO_BROADCAST_CONFIGURABLE
 	help
 	  Configurable option that doesn't follow any preset. Allows for more flexibility.
 
-config BT_AUDIO_BROADCAST_16_2_1
+config BT_BAP_BROADCAST_16_2_1
 	bool "16_2_1"
 	depends on TRANSPORT_BIS
 	help
 	  Broadcast mandatory codec capability 16_2_1
 	  16kHz, 32kbps, 2 retransmits, 10ms transport latency, and 40ms presentation delay.
 
-config BT_AUDIO_BROADCAST_24_2_1
+config BT_BAP_BROADCAST_24_2_1
 	bool "24_2_1"
 	depends on TRANSPORT_BIS
 	help
 	  Broadcast codec capability 24_2_1
 	  24kHz, 48kbps, 2 retransmits, 10ms transport latency, and 40ms presentation delay.
 
-config BT_AUDIO_BROADCAST_16_2_2
+config BT_BAP_BROADCAST_16_2_2
 	bool "16_2_2"
 	depends on TRANSPORT_BIS
 	help
 	  Broadcast mandatory codec capability 16_2_2
 	  16kHz, 32kbps, 4 retransmits, 60ms transport latency, and 40ms presentation delay.
 
-config BT_AUDIO_BROADCAST_24_2_2
+config BT_BAP_BROADCAST_24_2_2
 	bool "24_2_2"
 	depends on TRANSPORT_BIS
 	help
@@ -422,8 +422,8 @@ config BT_AUDIO_BITRATE_BROADCAST_SRC
 	int "ISO stream bitrate"
 	depends on TRANSPORT_BIS
 	default 96000 if BT_AUDIO_BROADCAST_CONFIGURABLE
-	default 32000 if BT_AUDIO_BROADCAST_16_2_1 || BT_AUDIO_BROADCAST_16_2_2
-	default 48000 if BT_AUDIO_BROADCAST_24_2_1 || BT_AUDIO_BROADCAST_24_2_2
+	default 32000 if BT_BAP_BROADCAST_16_2_1 || BT_BAP_BROADCAST_16_2_2
+	default 48000 if BT_BAP_BROADCAST_24_2_1 || BT_BAP_BROADCAST_24_2_2
 	help
 	  Bitrate for the broadcast source ISO stream.
 

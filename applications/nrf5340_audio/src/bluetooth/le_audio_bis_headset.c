@@ -11,7 +11,7 @@
 #include <zephyr/bluetooth/audio/pacs.h>
 
 /* TODO: Remove when a get_info function is implemented in host */
-#include <../subsys/bluetooth/audio/endpoint.h>
+#include <../subsys/bluetooth/audio/bap_endpoint.h>
 
 #include "macros_common.h"
 #include "ctrl_events.h"
@@ -21,7 +21,7 @@
 #include <zephyr/logging/log.h>
 LOG_MODULE_REGISTER(bis_headset, CONFIG_BLE_LOG_LEVEL);
 
-BUILD_ASSERT(CONFIG_BT_AUDIO_BROADCAST_SNK_STREAM_COUNT <= 2,
+BUILD_ASSERT(CONFIG_BT_BAP_BROADCAST_SNK_STREAM_COUNT <= 2,
 	     "A maximum of two broadcast streams are currently supported");
 
 struct audio_codec_info {
@@ -50,12 +50,12 @@ struct bt_name {
 static const char *const brdcast_src_names[] = { CONFIG_BT_AUDIO_BROADCAST_NAME,
 						 CONFIG_BT_AUDIO_BROADCAST_NAME_ALT };
 
-static struct bt_audio_broadcast_sink *broadcast_sink;
+static struct bt_bap_broadcast_sink *broadcast_sink;
 
-static struct bt_bap_stream audio_streams[CONFIG_BT_AUDIO_BROADCAST_SNK_STREAM_COUNT];
+static struct bt_bap_stream audio_streams[CONFIG_BT_BAP_BROADCAST_SNK_STREAM_COUNT];
 static struct bt_bap_stream *audio_streams_p[ARRAY_SIZE(audio_streams)];
-static struct audio_codec_info audio_codec_info[CONFIG_BT_AUDIO_BROADCAST_SNK_STREAM_COUNT];
-static uint32_t bis_index_bitfields[CONFIG_BT_AUDIO_BROADCAST_SNK_STREAM_COUNT];
+static struct audio_codec_info audio_codec_info[CONFIG_BT_BAP_BROADCAST_SNK_STREAM_COUNT];
+static uint32_t bis_index_bitfields[CONFIG_BT_BAP_BROADCAST_SNK_STREAM_COUNT];
 
 static struct active_audio_stream active_stream;
 
@@ -216,7 +216,7 @@ static void scan_term_cb(int err)
 	}
 }
 
-static void pa_synced_cb(struct bt_audio_broadcast_sink *sink, struct bt_le_per_adv_sync *sync,
+static void pa_synced_cb(struct bt_bap_broadcast_sink *sink, struct bt_le_per_adv_sync *sync,
 			 uint32_t broadcast_id)
 {
 	if (broadcast_sink != NULL) {
@@ -231,7 +231,7 @@ static void pa_synced_cb(struct bt_audio_broadcast_sink *sink, struct bt_le_per_
 	LOG_DBG("Broadcast source PA synced, waiting for BASE");
 }
 
-static void pa_sync_lost_cb(struct bt_audio_broadcast_sink *sink)
+static void pa_sync_lost_cb(struct bt_bap_broadcast_sink *sink)
 {
 	int ret;
 
@@ -252,13 +252,13 @@ static void pa_sync_lost_cb(struct bt_audio_broadcast_sink *sink)
 
 	LOG_INF("Restarting scanning for broadcast sources after sync lost");
 
-	ret = bt_audio_broadcast_sink_scan_start(BT_LE_SCAN_PASSIVE);
+	ret = bt_bap_broadcast_sink_scan_start(BT_LE_SCAN_PASSIVE);
 	if (ret) {
 		LOG_ERR("Unable to start scanning for broadcast sources");
 	}
 }
 
-static void base_recv_cb(struct bt_audio_broadcast_sink *sink, const struct bt_audio_base *base)
+static void base_recv_cb(struct bt_bap_broadcast_sink *sink, const struct bt_bap_base *base)
 {
 	int ret;
 	bool suitable_stream_found = false;
@@ -321,7 +321,7 @@ static void base_recv_cb(struct bt_audio_broadcast_sink *sink, const struct bt_a
 	}
 }
 
-static void syncable_cb(struct bt_audio_broadcast_sink *sink, bool encrypted)
+static void syncable_cb(struct bt_bap_broadcast_sink *sink, bool encrypted)
 {
 	int ret;
 	static uint8_t bis_encryption_key[16];
@@ -340,7 +340,7 @@ static void syncable_cb(struct bt_audio_broadcast_sink *sink, bool encrypted)
 
 	LOG_INF("Syncing to broadcast stream index %d", active_stream_index);
 
-	ret = bt_audio_broadcast_sink_sync(broadcast_sink, bis_index_bitfields[active_stream_index],
+	ret = bt_bap_broadcast_sink_sync(broadcast_sink, bis_index_bitfields[active_stream_index],
 					   audio_streams_p, bis_encryption_key);
 	if (ret) {
 		LOG_WRN("Unable to sync to broadcast source, ret: %d", ret);
@@ -350,7 +350,7 @@ static void syncable_cb(struct bt_audio_broadcast_sink *sink, bool encrypted)
 	init_routine_completed = true;
 }
 
-static struct bt_audio_broadcast_sink_cb broadcast_sink_cbs = { .scan_recv = scan_recv_cb,
+static struct bt_bap_broadcast_sink_cb broadcast_sink_cbs = { .scan_recv = scan_recv_cb,
 								.scan_term = scan_term_cb,
 								.pa_synced = pa_synced_cb,
 								.pa_sync_lost = pa_sync_lost_cb,
@@ -388,7 +388,7 @@ static void initialize(le_audio_receive_cb recv_cb)
 			ERR_CHK(ret);
 		}
 
-		bt_audio_broadcast_sink_register_cb(&broadcast_sink_cbs);
+		bt_bap_broadcast_sink_register_cb(&broadcast_sink_cbs);
 
 		for (int i = 0; i < ARRAY_SIZE(audio_streams); i++) {
 			audio_streams_p[i] = &audio_streams[i];
@@ -403,20 +403,20 @@ static int bis_headset_cleanup(bool from_sync_lost_cb)
 {
 	int ret;
 
-	ret = bt_audio_broadcast_sink_scan_stop();
+	ret = bt_bap_broadcast_sink_scan_stop();
 	if (ret && ret != -EALREADY) {
 		return ret;
 	}
 
 	if (broadcast_sink != NULL) {
 		if (!from_sync_lost_cb) {
-			ret = bt_audio_broadcast_sink_stop(broadcast_sink);
+			ret = bt_bap_broadcast_sink_stop(broadcast_sink);
 			if (ret && ret != -EALREADY) {
 				return ret;
 			}
 		}
 
-		ret = bt_audio_broadcast_sink_delete(broadcast_sink);
+		ret = bt_bap_broadcast_sink_delete(broadcast_sink);
 		if (ret && ret != -EALREADY) {
 			return ret;
 		}
@@ -435,7 +435,7 @@ static int change_active_audio_stream(void)
 
 	if (broadcast_sink != NULL) {
 		if (playing_state) {
-			ret = bt_audio_broadcast_sink_stop(broadcast_sink);
+			ret = bt_bap_broadcast_sink_stop(broadcast_sink);
 			if (ret) {
 				LOG_WRN("Failed to stop sink");
 			}
@@ -476,7 +476,7 @@ static int change_active_brdcast_src(void)
 	LOG_INF("Switching to %s", brdcast_src_names[active_stream.brdcast_src_name_idx]);
 
 	LOG_DBG("Restarting scanning for broadcast sources");
-	ret = bt_audio_broadcast_sink_scan_start(BT_LE_SCAN_PASSIVE);
+	ret = bt_bap_broadcast_sink_scan_start(BT_LE_SCAN_PASSIVE);
 	if (ret && ret != -EALREADY) {
 		LOG_ERR("Unable to start scanning for broadcast sources");
 		return ret;
@@ -552,7 +552,7 @@ int le_audio_play_pause(void)
 	if (playing_state) {
 		playing_state = false;
 
-		ret = bt_audio_broadcast_sink_stop(broadcast_sink);
+		ret = bt_bap_broadcast_sink_stop(broadcast_sink);
 		if (ret) {
 			LOG_ERR("Failed to stop broadcast sink: %d", ret);
 			return ret;
@@ -584,7 +584,7 @@ int le_audio_enable(le_audio_receive_cb recv_cb)
 
 	LOG_INF("Scanning for broadcast sources");
 
-	ret = bt_audio_broadcast_sink_scan_start(BT_LE_SCAN_PASSIVE);
+	ret = bt_bap_broadcast_sink_scan_start(BT_LE_SCAN_PASSIVE);
 	if (ret) {
 		return ret;
 	}
