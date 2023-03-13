@@ -10,8 +10,8 @@
 #include <zephyr/bluetooth/audio/audio.h>
 #include <zephyr/bluetooth/hci.h>
 #include <zephyr/bluetooth/audio/bap.h>
-
 #include <zephyr/bluetooth/audio/bap_lc3_preset.h>
+
 #include <../subsys/bluetooth/audio/bap_endpoint.h>
 #include <../subsys/bluetooth/audio/bap_iso.h>
 
@@ -365,7 +365,7 @@ static void stream_stopped_cb(struct bt_bap_stream *stream, uint8_t reason)
 	int ret;
 	uint8_t channel_index;
 
-	LOG_INF("Stream %p stopped", (void *)stream);
+	LOG_INF("Stream %p stopped. Reason: %d", (void *)stream, reason);
 
 	ret = channel_index_get(stream->conn, &channel_index);
 	if (ret) {

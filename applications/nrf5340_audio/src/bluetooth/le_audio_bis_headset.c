@@ -157,7 +157,7 @@ static void stream_stopped_cb(struct bt_bap_stream *stream, uint8_t reason)
 	ret = ctrl_events_le_audio_event_send(LE_AUDIO_EVT_NOT_STREAMING);
 	ERR_CHK(ret);
 
-	LOG_INF("Stream index %d stopped", active_stream_index);
+	LOG_INF("Stream index %d stopped. Reason: %d", active_stream_index, reason);
 }
 
 static void stream_recv_cb(struct bt_bap_stream *stream, const struct bt_iso_recv_info *info,

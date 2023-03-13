@@ -13,7 +13,6 @@
 #include <../subsys/bluetooth/audio/bap_endpoint.h>
 #include <../subsys/bluetooth/audio/bap_iso.h>
 
-
 #include "macros_common.h"
 #include "ctrl_events.h"
 #include "audio_datapath.h"
@@ -126,7 +125,7 @@ static void stream_stopped_cb(struct bt_bap_stream *stream, uint8_t reason)
 	ret = ctrl_events_le_audio_event_send(LE_AUDIO_EVT_NOT_STREAMING);
 	ERR_CHK(ret);
 
-	LOG_INF("Broadcast source %p stopped", (void *)stream);
+	LOG_INF("Broadcast source %p stopped. Reason: %d", (void *)stream, reason);
 
 	if (delete_broadcast_src && broadcast_source != NULL) {
 		ret = bt_audio_broadcast_source_delete(broadcast_source);
