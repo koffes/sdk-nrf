@@ -49,10 +49,10 @@ struct le_audio_headset {
 	uint32_t seq_num;
 	struct bt_bap_stream sink_stream;
 	struct bt_bap_ep *sink_ep;
-	struct bt_codec *sink_codec_cap[CONFIG_BT_BAP_UNICAST_CLIENT_PAC_COUNT];
+	struct bt_codec sink_codec_cap[CONFIG_BT_BAP_UNICAST_CLIENT_PAC_COUNT];
 	struct bt_bap_stream source_stream;
 	struct bt_bap_ep *source_ep;
-	struct bt_codec *source_codec_cap[CONFIG_BT_BAP_UNICAST_CLIENT_PAC_COUNT];
+	struct bt_codec source_codec_cap[CONFIG_BT_BAP_UNICAST_CLIENT_PAC_COUNT];
 	struct bt_conn *headset_conn;
 	struct net_buf_pool *iso_tx_pool;
 	atomic_t iso_tx_pool_alloc;
@@ -69,7 +69,7 @@ struct worker_data {
 struct temp_codec_cap_storage {
 	struct bt_conn *conn;
 	/* Must be the same size as sink_codec_cap and source_codec_cap */
-	struct bt_codec *cap[CONFIG_BT_BAP_UNICAST_CLIENT_PAC_COUNT];
+	struct bt_codec cap[CONFIG_BT_BAP_UNICAST_CLIENT_PAC_COUNT];
 };
 
 static struct le_audio_headset headsets[CONFIG_BT_MAX_CONN];
@@ -523,18 +523,17 @@ static int temp_codec_cap_index_get(struct bt_conn *conn, uint8_t *index)
  *
  * @return True if valid codec capability found, false otherwise
  */
-static bool valid_codec_cap_check(struct bt_codec *cap_array[], size_t size)
+static bool valid_codec_cap_check(struct bt_codec cap_array[], size_t size)
 {
 	const struct bt_codec_data *element;
 
 	/* Only the sampling frequency is checked */
 	for (int i = 0; i < size; i++) {
-		if (bt_codec_get_val(cap_array[i], BT_CODEC_LC3_FREQ, &element)) {
+		if (bt_codec_get_val(&cap_array[i], BT_CODEC_LC3_FREQ, &element)) {
 			if (element->data.data[0] & BT_AUDIO_CODEC_CAPABILIY_FREQ) {
 				return true;
 			}
 		}
-		LOG_WRN("no match %d and %d", element->data.data[0], BT_AUDIO_CODEC_CAPABILIY_FREQ);
 	}
 
 	return false;
@@ -569,7 +568,7 @@ static void discover_sink_cb(struct bt_conn *conn, struct bt_codec *codec, struc
 
 		if (params->num_caps < ARRAY_SIZE(temp_codec_cap[temp_cap_index].cap)) {
 			/* params->num_caps is an increasing index that starts at 0 */
-			temp_codec_cap[temp_cap_index].cap[params->num_caps] = codec;
+			temp_codec_cap[temp_cap_index].cap[params->num_caps] = *codec;
 		} else {
 			LOG_WRN("No more space for storing capabilities");
 		}
@@ -628,8 +627,8 @@ static void discover_sink_cb(struct bt_conn *conn, struct bt_codec *codec, struc
 	}
 
 	/* Free up the slot in temp_codec_cap */
-	temp_codec_cap[temp_cap_index].conn = NULL;
 	memset(temp_codec_cap[temp_cap_index].cap, 0, sizeof(temp_codec_cap[temp_cap_index].cap));
+	temp_codec_cap[temp_cap_index].conn = NULL;
 
 #if CONFIG_STREAM_BIDIRECTIONAL
 	ret = discover_source(conn);
@@ -670,7 +669,7 @@ static void discover_source_cb(struct bt_conn *conn, struct bt_codec *codec, str
 
 		if (params->num_caps < ARRAY_SIZE(temp_codec_cap[temp_cap_index].cap)) {
 			/* params->num_caps is an increasing index that starts at 0 */
-			temp_codec_cap[temp_cap_index].cap[params->num_caps] = codec;
+			temp_codec_cap[temp_cap_index].cap[params->num_caps] = *codec;
 		} else {
 			LOG_WRN("No more space for storing capabilities");
 		}
@@ -722,8 +721,8 @@ static void discover_source_cb(struct bt_conn *conn, struct bt_codec *codec, str
 	}
 
 	/* Free up the slot in temp_codec_cap */
-	temp_codec_cap[temp_cap_index].conn = NULL;
 	memset(temp_codec_cap[temp_cap_index].cap, 0, sizeof(temp_codec_cap[temp_cap_index].cap));
+	temp_codec_cap[temp_cap_index].conn = NULL;
 }
 #endif /* CONFIG_STREAM_BIDIRECTIONAL */
 
