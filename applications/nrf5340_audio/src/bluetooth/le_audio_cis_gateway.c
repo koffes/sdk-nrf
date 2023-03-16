@@ -66,10 +66,15 @@ struct worker_data {
 	uint8_t retries;
 } __aligned(4);
 
+struct data_storage {
+	struct bt_codec codec;
+	uint8_t data[CONFIG_BT_CODEC_MAX_DATA_COUNT][100];
+};
+
 struct temp_codec_cap_storage {
 	struct bt_conn *conn;
 	/* Must be the same size as sink_codec_cap and source_codec_cap */
-	struct bt_codec cap[CONFIG_BT_BAP_UNICAST_CLIENT_PAC_COUNT];
+	struct data_storage cap[CONFIG_BT_BAP_UNICAST_CLIENT_PAC_COUNT];
 };
 
 static struct le_audio_headset headsets[CONFIG_BT_MAX_CONN];
@@ -94,8 +99,7 @@ static le_audio_receive_cb receive_cb;
 static struct bt_bap_unicast_group *unicast_group;
 
 static struct bt_bap_lc3_preset lc3_preset_sink = BT_BAP_LC3_UNICAST_PRESET_NRF5340_AUDIO_SINK;
-static struct bt_bap_lc3_preset lc3_preset_source =
-	BT_BAP_LC3_UNICAST_PRESET_NRF5340_AUDIO_SOURCE;
+static struct bt_bap_lc3_preset lc3_preset_source = BT_BAP_LC3_UNICAST_PRESET_NRF5340_AUDIO_SOURCE;
 
 static uint8_t bonded_num;
 static bool playing_state = true;
@@ -230,8 +234,7 @@ static void stream_sent_cb(struct bt_bap_stream *stream)
 	}
 }
 
-static void stream_configured_cb(struct bt_bap_stream *stream,
-				 const struct bt_codec_qos_pref *pref)
+static void stream_configured_cb(struct bt_bap_stream *stream, const struct bt_codec_qos_pref *pref)
 {
 	int ret;
 	uint8_t channel_index;
@@ -273,7 +276,7 @@ static void stream_qos_set_cb(struct bt_bap_stream *stream)
 
 	if (playing_state) {
 		ret = bt_bap_stream_enable(stream, lc3_preset_sink.codec.meta,
-					     lc3_preset_sink.codec.meta_count);
+					   lc3_preset_sink.codec.meta_count);
 		if (ret) {
 			LOG_ERR("Unable to enable stream: %d", ret);
 		}
@@ -568,7 +571,29 @@ static void discover_sink_cb(struct bt_conn *conn, struct bt_codec *codec, struc
 
 		if (params->num_caps < ARRAY_SIZE(temp_codec_cap[temp_cap_index].cap)) {
 			/* params->num_caps is an increasing index that starts at 0 */
-			temp_codec_cap[temp_cap_index].cap[params->num_caps] = *codec;
+			const struct bt_codec_data *element;
+
+			memcpy(&(temp_codec_cap[temp_cap_index].cap[params->num_caps].codec), codec,
+			       sizeof(struct bt_codec));
+
+			for (int i = 0; i < codec->data_count; i++) {
+				LOG_WRN("Length to copy %d", codec->data[i].data.data_len);
+				memcpy(&temp_codec_cap[temp_cap_index].cap[params->num_caps].data[i]
+				, codec->data[i].data.data, codec->data[i].data.data_len);
+				temp_codec_cap[temp_cap_index]
+					.cap[params->num_caps]
+					.codec.data[i]
+					.data.data = &(temp_codec_cap[temp_cap_index]
+							       .cap[temp_cap_index]
+							       .data[i][0]);
+			}
+
+			memset(codec, 0xFF, sizeof(struct bt_codec));
+
+			bt_codec_get_val(
+				&temp_codec_cap[temp_cap_index].cap[params->num_caps].codec,
+				BT_CODEC_LC3_FREQ, &element);
+			LOG_WRN("IS %d", element->data.data[0]);
 		} else {
 			LOG_WRN("No more space for storing capabilities");
 		}
@@ -582,6 +607,13 @@ static void discover_sink_cb(struct bt_conn *conn, struct bt_codec *codec, struc
 		return;
 	}
 
+	const struct bt_codec_data *elementX;
+
+	bt_codec_get_val(&temp_codec_cap[temp_cap_index].cap[0].codec, BT_CODEC_LC3_FREQ,
+			 &elementX);
+	LOG_WRN("ISX 1 %d", elementX->data.data[0]);
+
+	LOG_WRN("STORING TO HEADSETS");
 	/* At this point the location/channel index of the headset is always known */
 	memcpy(headsets[channel_index].sink_codec_cap, temp_codec_cap[temp_cap_index].cap,
 	       sizeof(temp_codec_cap[temp_cap_index].cap));
@@ -616,8 +648,7 @@ static void discover_sink_cb(struct bt_conn *conn, struct bt_codec *codec, struc
 	if (valid_codec_cap_check(headsets[channel_index].sink_codec_cap,
 				  ARRAY_SIZE(headsets[channel_index].sink_codec_cap))) {
 		ret = bt_bap_stream_config(conn, &headsets[channel_index].sink_stream,
-					     headsets[channel_index].sink_ep,
-					     &lc3_preset_sink.codec);
+					   headsets[channel_index].sink_ep, &lc3_preset_sink.codec);
 		LOG_WRN("Valid CAP set!");
 		if (ret) {
 			LOG_ERR("Could not configure sink stream");
@@ -628,6 +659,7 @@ static void discover_sink_cb(struct bt_conn *conn, struct bt_codec *codec, struc
 	}
 
 	/* Free up the slot in temp_codec_cap */
+	LOG_WRN("MEMSET TO ZERO OF TEMP");
 	memset(temp_codec_cap[temp_cap_index].cap, 0, sizeof(temp_codec_cap[temp_cap_index].cap));
 	temp_codec_cap[temp_cap_index].conn = NULL;
 
@@ -711,8 +743,8 @@ static void discover_source_cb(struct bt_conn *conn, struct bt_codec *codec, str
 	if (valid_codec_cap_check(headsets[channel_index].source_codec_cap,
 				  ARRAY_SIZE(headsets[channel_index].source_codec_cap))) {
 		ret = bt_bap_stream_config(conn, &headsets[channel_index].source_stream,
-					     headsets[channel_index].source_ep,
-					     &lc3_preset_source.codec);
+					   headsets[channel_index].source_ep,
+					   &lc3_preset_source.codec);
 		if (ret) {
 			LOG_WRN("Could not configure stream");
 		}
@@ -1035,8 +1067,8 @@ static void le_audio_play_pause_cb(bool play)
 		if (ep_state_check(headsets[AUDIO_CH_L].sink_stream.ep,
 				   BT_BAP_EP_STATE_QOS_CONFIGURED)) {
 			ret = bt_bap_stream_enable(&headsets[AUDIO_CH_L].sink_stream,
-						     lc3_preset_sink.codec.meta,
-						     lc3_preset_sink.codec.meta_count);
+						   lc3_preset_sink.codec.meta,
+						   lc3_preset_sink.codec.meta_count);
 
 			if (ret) {
 				LOG_WRN("Failed to enable left stream");
@@ -1046,8 +1078,8 @@ static void le_audio_play_pause_cb(bool play)
 		if (ep_state_check(headsets[AUDIO_CH_R].sink_stream.ep,
 				   BT_BAP_EP_STATE_QOS_CONFIGURED)) {
 			ret = bt_bap_stream_enable(&headsets[AUDIO_CH_R].sink_stream,
-						     lc3_preset_sink.codec.meta,
-						     lc3_preset_sink.codec.meta_count);
+						   lc3_preset_sink.codec.meta,
+						   lc3_preset_sink.codec.meta_count);
 
 			if (ret) {
 				LOG_WRN("Failed to enable right stream");
@@ -1122,8 +1154,7 @@ static int iso_stream_send(uint8_t const *const data, size_t size, struct le_aud
 	atomic_inc(&headset.iso_tx_pool_alloc);
 
 	ret = bt_bap_stream_send(&headset.sink_stream, buf,
-				   get_and_incr_seq_num(&headset.sink_stream),
-				   BT_ISO_TIMESTAMP_NONE);
+				 get_and_incr_seq_num(&headset.sink_stream), BT_ISO_TIMESTAMP_NONE);
 	if (ret < 0) {
 		LOG_WRN("Failed to send audio data to %s: %d", headset.ch_name, ret);
 		net_buf_unref(buf);
@@ -1328,8 +1359,7 @@ int le_audio_send(struct encoded_audio enc_audio)
 	if (ep_state_check(headsets[AUDIO_CH_L].sink_stream.ep, BT_BAP_EP_STATE_STREAMING)) {
 		ret = bt_iso_chan_get_tx_sync(&headsets[AUDIO_CH_L].sink_stream.ep->iso->chan,
 					      &tx_info);
-	} else if (ep_state_check(headsets[AUDIO_CH_R].sink_stream.ep,
-				  BT_BAP_EP_STATE_STREAMING)) {
+	} else if (ep_state_check(headsets[AUDIO_CH_R].sink_stream.ep, BT_BAP_EP_STATE_STREAMING)) {
 		ret = bt_iso_chan_get_tx_sync(&headsets[AUDIO_CH_R].sink_stream.ep->iso->chan,
 					      &tx_info);
 	} else {
