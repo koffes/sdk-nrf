@@ -618,6 +618,7 @@ static void discover_sink_cb(struct bt_conn *conn, struct bt_codec *codec, struc
 		ret = bt_bap_stream_config(conn, &headsets[channel_index].sink_stream,
 					     headsets[channel_index].sink_ep,
 					     &lc3_preset_sink.codec);
+		LOG_WRN("Valid CAP set!");
 		if (ret) {
 			LOG_ERR("Could not configure sink stream");
 		}
