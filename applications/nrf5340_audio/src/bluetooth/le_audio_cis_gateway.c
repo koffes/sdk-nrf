@@ -588,8 +588,6 @@ static void discover_sink_cb(struct bt_conn *conn, struct bt_codec *codec, struc
 							       .data[i][0]);
 			}
 
-			memset(codec, 0xFF, sizeof(struct bt_codec));
-
 			bt_codec_get_val(
 				&temp_codec_cap[temp_cap_index].cap[params->num_caps].codec,
 				BT_CODEC_LC3_FREQ, &element);
@@ -615,8 +613,9 @@ static void discover_sink_cb(struct bt_conn *conn, struct bt_codec *codec, struc
 
 	LOG_WRN("STORING TO HEADSETS");
 	/* At this point the location/channel index of the headset is always known */
-	memcpy(headsets[channel_index].sink_codec_cap, temp_codec_cap[temp_cap_index].cap,
-	       sizeof(temp_codec_cap[temp_cap_index].cap));
+
+	memcpy(headsets[channel_index].sink_codec_cap, &temp_codec_cap[temp_cap_index].cap->codec,
+		sizeof(struct bt_codec) * CONFIG_BT_BAP_UNICAST_CLIENT_PAC_COUNT);
 
 	if (ep != NULL) {
 		/* params->num_eps is an increasing index that starts at 0 */
