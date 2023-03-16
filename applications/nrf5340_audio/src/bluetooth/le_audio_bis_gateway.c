@@ -125,7 +125,8 @@ static void stream_stopped_cb(struct bt_bap_stream *stream, uint8_t reason)
 	ret = ctrl_events_le_audio_event_send(LE_AUDIO_EVT_NOT_STREAMING);
 	ERR_CHK(ret);
 
-	LOG_INF("Broadcast source %p stopped. Reason: %d", (void *)stream, reason);
+	LOG_INF("Broadcast source %p stopped", (void *)stream);
+	LOG_DBG("Reason for stopping: 0x%02x", reason);
 
 	if (delete_broadcast_src && broadcast_source != NULL) {
 		ret = bt_bap_broadcast_source_delete(broadcast_source);
@@ -144,8 +145,8 @@ static void stream_stopped_cb(struct bt_bap_stream *stream, uint8_t reason)
 }
 
 static struct bt_bap_stream_ops stream_ops = { .sent = stream_sent_cb,
-						 .started = stream_started_cb,
-						 .stopped = stream_stopped_cb };
+					       .started = stream_started_cb,
+					       .stopped = stream_stopped_cb };
 
 #if (CONFIG_AURACAST)
 static void public_broadcast_features_set(uint8_t *features)
@@ -455,7 +456,7 @@ int le_audio_send(struct encoded_audio enc_audio)
 		atomic_inc(&iso_tx_pool_alloc[i]);
 
 		ret = bt_bap_stream_send(&audio_streams[i], buf, seq_num[i]++,
-					   BT_ISO_TIMESTAMP_NONE);
+					 BT_ISO_TIMESTAMP_NONE);
 		if (ret < 0) {
 			LOG_WRN("Failed to send audio data: %d", ret);
 			net_buf_unref(buf);

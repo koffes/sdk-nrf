@@ -157,7 +157,8 @@ static void stream_stopped_cb(struct bt_bap_stream *stream, uint8_t reason)
 	ret = ctrl_events_le_audio_event_send(LE_AUDIO_EVT_NOT_STREAMING);
 	ERR_CHK(ret);
 
-	LOG_INF("Stream index %d stopped. Reason: %d", active_stream_index, reason);
+	LOG_INF("Stream index %d stopped", active_stream_index);
+	LOG_DBG("Reason for stopping: 0x%02x", reason);
 }
 
 static void stream_recv_cb(struct bt_bap_stream *stream, const struct bt_iso_recv_info *info,
@@ -185,8 +186,8 @@ static void stream_recv_cb(struct bt_bap_stream *stream, const struct bt_iso_rec
 }
 
 static struct bt_bap_stream_ops stream_ops = { .started = stream_started_cb,
-						 .stopped = stream_stopped_cb,
-						 .recv = stream_recv_cb };
+					       .stopped = stream_stopped_cb,
+					       .recv = stream_recv_cb };
 
 static bool scan_recv_cb(const struct bt_le_scan_recv_info *info, struct net_buf_simple *ad,
 			 uint32_t broadcast_id)
@@ -332,8 +333,7 @@ static void syncable_cb(struct bt_bap_broadcast_sink *sink, bool encrypted)
 	strncpy(bis_encryption_key, CONFIG_BT_AUDIO_BROADCAST_ENCRYPTION_KEY, 16);
 #endif /* (CONFIG_BT_AUDIO_BROADCAST_ENCRYPTED) */
 
-	if (active_stream.stream->ep->status.state == BT_BAP_EP_STATE_STREAMING ||
-	    !playing_state) {
+	if (active_stream.stream->ep->status.state == BT_BAP_EP_STATE_STREAMING || !playing_state) {
 		LOG_DBG("Syncable received, but either in paused_state or already in a stream");
 		return;
 	}
@@ -341,7 +341,7 @@ static void syncable_cb(struct bt_bap_broadcast_sink *sink, bool encrypted)
 	LOG_INF("Syncing to broadcast stream index %d", active_stream_index);
 
 	ret = bt_bap_broadcast_sink_sync(broadcast_sink, bis_index_bitfields[active_stream_index],
-					   audio_streams_p, bis_encryption_key);
+					 audio_streams_p, bis_encryption_key);
 	if (ret) {
 		LOG_WRN("Unable to sync to broadcast source, ret: %d", ret);
 		return;
@@ -351,11 +351,11 @@ static void syncable_cb(struct bt_bap_broadcast_sink *sink, bool encrypted)
 }
 
 static struct bt_bap_broadcast_sink_cb broadcast_sink_cbs = { .scan_recv = scan_recv_cb,
-								.scan_term = scan_term_cb,
-								.pa_synced = pa_synced_cb,
-								.pa_sync_lost = pa_sync_lost_cb,
-								.base_recv = base_recv_cb,
-								.syncable = syncable_cb };
+							      .scan_term = scan_term_cb,
+							      .pa_synced = pa_synced_cb,
+							      .pa_sync_lost = pa_sync_lost_cb,
+							      .base_recv = base_recv_cb,
+							      .syncable = syncable_cb };
 
 static struct bt_pacs_cap capabilities = {
 	.codec = &codec_capabilities,

@@ -124,11 +124,9 @@ config BT_PACS_SRC_CONTEXT
 	default 0x0007 if STREAM_BIDIRECTIONAL
 
 config BT_CSIP_SET_MEMBER
-	bool
 	default y
 
 config BT_CAP_ACCEPTOR
-	bool
 	default y
 
 config BT_CAP_ACCEPTOR_SET_MEMBER
@@ -203,7 +201,6 @@ endif # TRANSPORT_CIS
 if TRANSPORT_BIS # Depends on TRANSPORT_BIS
 
 config BT_BUF_ACL_RX_SIZE
-	int
 	default 502 if (AUDIO_DFU > 0)
 
 # HEADSET
@@ -243,7 +240,6 @@ endif # AUDIO_DEV = 1 (HEADSET)
 if AUDIO_DEV = 2
 
 config BT_AUDIO_BROADCAST_NAME
-	string "Broadcast name"
 	default BT_AUDIO_BROADCAST_NAME_ALT if BT_AUDIO_USE_BROADCAST_NAME_ALT
 
 config BT_DEVICE_APPEARANCE
@@ -260,7 +256,6 @@ config BT_ISO_TX_BUF_COUNT
 	default 2
 
 config BT_BAP_BROADCAST_SRC_STREAM_COUNT
-	int "Number of broadcast source streams"
 	default 2
 
 config BT_ISO_MAX_CHAN

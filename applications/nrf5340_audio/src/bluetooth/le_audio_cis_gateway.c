@@ -68,10 +68,10 @@ struct worker_data {
 
 struct data_storage {
 	struct bt_codec codec;
-	uint8_t data[CONFIG_BT_CODEC_MAX_DATA_COUNT][100];
+	uint8_t data[CONFIG_BT_CODEC_MAX_DATA_COUNT][CONFIG_BT_CODEC_MAX_DATA_LEN];
 };
 
-struct temp_codec_cap_storage {
+struct temp_cap_storage {
 	struct bt_conn *conn;
 	/* Must be the same size as sink_codec_cap and source_codec_cap */
 	struct data_storage cap[CONFIG_BT_BAP_UNICAST_CLIENT_PAC_COUNT];
@@ -84,7 +84,7 @@ K_MSGQ_DEFINE(kwork_msgq, sizeof(struct worker_data),
 		   CONFIG_BT_BAP_UNICAST_CLIENT_ASE_SRC_COUNT),
 	      sizeof(uint32_t));
 
-static struct temp_codec_cap_storage temp_codec_cap[CONFIG_BT_MAX_CONN];
+static struct temp_cap_storage temp_cap[CONFIG_BT_MAX_CONN];
 
 /* Make sure that we have at least one headset device per CONFIG_BT_BAP_UNICAST_CLIENT_ASE_SNK */
 BUILD_ASSERT(ARRAY_SIZE(headsets) >= CONFIG_BT_BAP_UNICAST_CLIENT_ASE_SNK_COUNT,
@@ -368,7 +368,8 @@ static void stream_stopped_cb(struct bt_bap_stream *stream, uint8_t reason)
 	int ret;
 	uint8_t channel_index;
 
-	LOG_INF("Stream %p stopped. Reason: %d", (void *)stream, reason);
+	LOG_INF("Stream %p stopped", (void *)stream);
+	LOG_DBG("Reason for stopping: 0x%02x", reason);
 
 	ret = channel_index_get(stream->conn, &channel_index);
 	if (ret) {
@@ -488,30 +489,30 @@ static void work_stream_start(struct k_work *work)
 	}
 }
 
-static int temp_codec_cap_index_get(struct bt_conn *conn, uint8_t *index)
+static int temp_cap_index_get(struct bt_conn *conn, uint8_t *index)
 {
 	if (conn == NULL) {
 		LOG_ERR("No conn provided");
 		return -EINVAL;
 	}
 
-	for (int i = 0; i < ARRAY_SIZE(temp_codec_cap); i++) {
-		if (temp_codec_cap[i].conn == conn) {
+	for (int i = 0; i < ARRAY_SIZE(temp_cap); i++) {
+		if (temp_cap[i].conn == conn) {
 			*index = i;
 			return 0;
 		}
 	}
 
-	/* Connection not found in temp_codec_cap, searching for empty slot */
-	for (int i = 0; i < ARRAY_SIZE(temp_codec_cap); i++) {
-		if (temp_codec_cap[i].conn == NULL) {
-			temp_codec_cap[i].conn = conn;
+	/* Connection not found in temp_cap, searching for empty slot */
+	for (int i = 0; i < ARRAY_SIZE(temp_cap); i++) {
+		if (temp_cap[i].conn == NULL) {
+			temp_cap[i].conn = conn;
 			*index = i;
 			return 0;
 		}
 	}
 
-	LOG_WRN("No more space in temp_codec_cap");
+	LOG_WRN("No more space in temp_cap");
 
 	return -ECANCELED;
 }
@@ -557,7 +558,7 @@ static void discover_sink_cb(struct bt_conn *conn, struct bt_codec *codec, struc
 		return;
 	}
 
-	ret = temp_codec_cap_index_get(conn, &temp_cap_index);
+	ret = temp_cap_index_get(conn, &temp_cap_index);
 	if (ret) {
 		LOG_ERR("Could not get temporary CAP storage index");
 		return;
@@ -569,29 +570,21 @@ static void discover_sink_cb(struct bt_conn *conn, struct bt_codec *codec, struc
 			return;
 		}
 
-		if (params->num_caps < ARRAY_SIZE(temp_codec_cap[temp_cap_index].cap)) {
+		if (params->num_caps < ARRAY_SIZE(temp_cap[temp_cap_index].cap)) {
 			/* params->num_caps is an increasing index that starts at 0 */
-			const struct bt_codec_data *element;
 
-			memcpy(&(temp_codec_cap[temp_cap_index].cap[params->num_caps].codec), codec,
+			memcpy(&(temp_cap[temp_cap_index].cap[params->num_caps].codec), codec,
 			       sizeof(struct bt_codec));
 
 			for (int i = 0; i < codec->data_count; i++) {
-				LOG_WRN("Length to copy %d", codec->data[i].data.data_len);
-				memcpy(&temp_codec_cap[temp_cap_index].cap[params->num_caps].data[i]
-				, codec->data[i].data.data, codec->data[i].data.data_len);
-				temp_codec_cap[temp_cap_index]
+				memcpy(&temp_cap[temp_cap_index].cap[params->num_caps].data[i],
+				       codec->data[i].data.data, codec->data[i].data.data_len);
+				temp_cap[temp_cap_index]
 					.cap[params->num_caps]
 					.codec.data[i]
-					.data.data = &(temp_codec_cap[temp_cap_index]
-							       .cap[temp_cap_index]
-							       .data[i][0]);
+					.data.data =
+					temp_cap[temp_cap_index].cap[params->num_caps].data[i];
 			}
-
-			bt_codec_get_val(
-				&temp_codec_cap[temp_cap_index].cap[params->num_caps].codec,
-				BT_CODEC_LC3_FREQ, &element);
-			LOG_WRN("IS %d", element->data.data[0]);
 		} else {
 			LOG_WRN("No more space for storing capabilities");
 		}
@@ -605,17 +598,11 @@ static void discover_sink_cb(struct bt_conn *conn, struct bt_codec *codec, struc
 		return;
 	}
 
-	const struct bt_codec_data *elementX;
-
-	bt_codec_get_val(&temp_codec_cap[temp_cap_index].cap[0].codec, BT_CODEC_LC3_FREQ,
-			 &elementX);
-	LOG_WRN("ISX 1 %d", elementX->data.data[0]);
-
-	LOG_WRN("STORING TO HEADSETS");
 	/* At this point the location/channel index of the headset is always known */
-
-	memcpy(headsets[channel_index].sink_codec_cap, &temp_codec_cap[temp_cap_index].cap->codec,
-		sizeof(struct bt_codec) * CONFIG_BT_BAP_UNICAST_CLIENT_PAC_COUNT);
+	for (int i = 0; i < CONFIG_BT_BAP_UNICAST_CLIENT_PAC_COUNT; i++) {
+		memcpy(&headsets[channel_index].sink_codec_cap[i],
+		       &temp_cap[temp_cap_index].cap[i].codec, (sizeof(struct bt_codec)));
+	}
 
 	if (ep != NULL) {
 		/* params->num_eps is an increasing index that starts at 0 */
@@ -648,7 +635,6 @@ static void discover_sink_cb(struct bt_conn *conn, struct bt_codec *codec, struc
 				  ARRAY_SIZE(headsets[channel_index].sink_codec_cap))) {
 		ret = bt_bap_stream_config(conn, &headsets[channel_index].sink_stream,
 					   headsets[channel_index].sink_ep, &lc3_preset_sink.codec);
-		LOG_WRN("Valid CAP set!");
 		if (ret) {
 			LOG_ERR("Could not configure sink stream");
 		}
@@ -657,10 +643,9 @@ static void discover_sink_cb(struct bt_conn *conn, struct bt_codec *codec, struc
 			headsets[channel_index].ch_name);
 	}
 
-	/* Free up the slot in temp_codec_cap */
-	LOG_WRN("MEMSET TO ZERO OF TEMP");
-	memset(temp_codec_cap[temp_cap_index].cap, 0, sizeof(temp_codec_cap[temp_cap_index].cap));
-	temp_codec_cap[temp_cap_index].conn = NULL;
+	/* Free up the slot in temp_cap */
+	memset(temp_cap[temp_cap_index].cap, 0, sizeof(temp_cap[temp_cap_index].cap));
+	temp_cap[temp_cap_index].conn = NULL;
 
 #if CONFIG_STREAM_BIDIRECTIONAL
 	ret = discover_source(conn);
@@ -687,7 +672,7 @@ static void discover_source_cb(struct bt_conn *conn, struct bt_codec *codec, str
 		return;
 	}
 
-	ret = temp_codec_cap_index_get(conn, &temp_cap_index);
+	ret = temp_cap_index_get(conn, &temp_cap_index);
 	if (ret) {
 		LOG_ERR("Could not get temporary CAP storage index");
 		return;
@@ -699,9 +684,9 @@ static void discover_source_cb(struct bt_conn *conn, struct bt_codec *codec, str
 			return;
 		}
 
-		if (params->num_caps < ARRAY_SIZE(temp_codec_cap[temp_cap_index].cap)) {
+		if (params->num_caps < ARRAY_SIZE(temp_cap[temp_cap_index].cap)) {
 			/* params->num_caps is an increasing index that starts at 0 */
-			temp_codec_cap[temp_cap_index].cap[params->num_caps] = *codec;
+			temp_cap[temp_cap_index].cap[params->num_caps] = *codec;
 		} else {
 			LOG_WRN("No more space for storing capabilities");
 		}
@@ -716,8 +701,8 @@ static void discover_source_cb(struct bt_conn *conn, struct bt_codec *codec, str
 	}
 
 	/* At this point the location/channel index of the headset is always known */
-	memcpy(headsets[channel_index].source_codec_cap, temp_codec_cap[temp_cap_index].cap,
-	       sizeof(temp_codec_cap[temp_cap_index].cap));
+	memcpy(headsets[channel_index].source_codec_cap, temp_cap[temp_cap_index].cap,
+	       sizeof(temp_cap[temp_cap_index].cap));
 
 	if (ep != NULL) {
 		/* params->num_eps is an increasing index that starts at 0 */
@@ -752,9 +737,9 @@ static void discover_source_cb(struct bt_conn *conn, struct bt_codec *codec, str
 			headsets[channel_index].ch_name);
 	}
 
-	/* Free up the slot in temp_codec_cap */
-	memset(temp_codec_cap[temp_cap_index].cap, 0, sizeof(temp_codec_cap[temp_cap_index].cap));
-	temp_codec_cap[temp_cap_index].conn = NULL;
+	/* Free up the slot in temp_cap */
+	memset(temp_cap[temp_cap_index].cap, 0, sizeof(temp_cap[temp_cap_index].cap));
+	temp_cap[temp_cap_index].conn = NULL;
 }
 #endif /* CONFIG_STREAM_BIDIRECTIONAL */
 

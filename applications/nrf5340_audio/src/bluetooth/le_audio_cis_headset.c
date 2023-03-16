@@ -87,7 +87,7 @@ struct bt_csip_set_member_register_param csip_param = {
 #if !CONFIG_BT_CSIP_SET_MEMBER_TEST_SAMPLE_DATA
 	/* CSIP SIRK for demo is used, must be changed before production */
 	.set_sirk = { 'N', 'R', 'F', '5', '3', '4', '0', '_', 'T', 'W', 'S', '_', 'D', 'E', 'M',
-			  'O' },
+		      'O' },
 #else
 #warning "CSIP test sample data is used, must be changed before production"
 #endif
@@ -131,7 +131,7 @@ static struct bt_bap_stream
 
 #if CONFIG_STREAM_BIDIRECTIONAL
 BUILD_ASSERT(CONFIG_BT_ASCS_ASE_SRC_COUNT <= 1,
-		 "CIS headset only supports one source stream for now");
+	     "CIS headset only supports one source stream for now");
 static struct bt_audio_source {
 	struct bt_bap_stream *stream;
 	uint32_t seq_num;
@@ -341,9 +341,6 @@ static int lc3_enable_cb(struct bt_bap_stream *stream, const struct bt_codec_dat
 
 	LOG_DBG("Enable: stream %p meta_count %d", (void *)stream, meta_count);
 
-	ret = ctrl_events_le_audio_event_send(LE_AUDIO_EVT_STREAMING);
-	ERR_CHK(ret);
-
 	/* MCS discover needs to be done once per connection */
 	if (IS_ENABLED(CONFIG_BT_MCC)) {
 		ret = ble_mcs_discover(stream->conn);
@@ -359,7 +356,7 @@ static int lc3_enable_cb(struct bt_bap_stream *stream, const struct bt_codec_dat
 
 static int lc3_start_cb(struct bt_bap_stream *stream)
 {
-	LOG_DBG("Stream started %p", (void *)stream);
+	LOG_DBG("Start stream %p", (void *)stream);
 	return 0;
 }
 
@@ -450,21 +447,29 @@ static void stream_recv_cb(struct bt_bap_stream *stream, const struct bt_iso_rec
 
 static void stream_start_cb(struct bt_bap_stream *stream)
 {
+	int ret;
+
 	LOG_INF("Stream started");
+
+	ret = ctrl_events_le_audio_event_send(LE_AUDIO_EVT_STREAMING);
+	ERR_CHK(ret);
+}
+
+static void stream_released_cb(struct bt_bap_stream *stream)
+{
+	LOG_INF("Stream released");
 }
 
 static void stream_enabled_cb(struct bt_bap_stream *stream)
 {
-	LOG_INF("Stream enabled");
 	int ret;
+	LOG_DBG("Stream enabled");
 
-	if (stream->dir == BT_AUDIO_DIR_SINK) {
-		/* Automatically do the receiver start ready operation */
-		ret = bt_bap_stream_start(stream);
-		if (ret != 0) {
-			LOG_ERR("Failed to start stream: %d", ret);
-			return;
-		}
+	/* Automatically do the receiver start ready operation */
+	ret = bt_bap_stream_start(stream);
+	if (ret != 0) {
+		LOG_ERR("Failed to start stream: %d", ret);
+		return;
 	}
 }
 
@@ -474,7 +479,8 @@ static void stream_stop_cb(struct bt_bap_stream *stream, uint8_t reason)
 {
 	int ret;
 
-	LOG_INF("Stream stopped. Reason: %d", reason);
+	LOG_INF("Stream stopped");
+	LOG_DBG("Reason for stopping: 0x%02x", reason);
 #if CONFIG_STREAM_BIDIRECTIONAL
 	atomic_clear(&iso_tx_pool_alloc);
 #endif /* CONFIG_STREAM_BIDIRECTIONAL */
@@ -561,10 +567,11 @@ static struct bt_conn_cb conn_callbacks = {
 };
 
 static struct bt_bap_stream_ops stream_ops = { .recv = stream_recv_cb,
-						 .sent = stream_sent_cb,
-						 .enabled = stream_enabled_cb,
-						 .started = stream_start_cb,
-						 .stopped = stream_stop_cb };
+					       .sent = stream_sent_cb,
+					       .enabled = stream_enabled_cb,
+					       .started = stream_start_cb,
+					       .stopped = stream_stop_cb,
+					       .released = stream_released_cb };
 
 static int initialize(le_audio_receive_cb recv_cb)
 {
@@ -622,9 +629,9 @@ static int initialize(le_audio_receive_cb recv_cb)
 		}
 #if CONFIG_STREAM_BIDIRECTIONAL
 		ret = bt_pacs_set_supported_contexts(BT_AUDIO_DIR_SINK,
-				BT_AUDIO_CONTEXT_TYPE_MEDIA |
-				BT_AUDIO_CONTEXT_TYPE_CONVERSATIONAL |
-				BT_AUDIO_CONTEXT_TYPE_UNSPECIFIED);
+						     BT_AUDIO_CONTEXT_TYPE_MEDIA |
+							     BT_AUDIO_CONTEXT_TYPE_CONVERSATIONAL |
+							     BT_AUDIO_CONTEXT_TYPE_UNSPECIFIED);
 
 		if (ret) {
 			LOG_ERR("Supported context set failed. Err: %d", ret);
@@ -632,18 +639,18 @@ static int initialize(le_audio_receive_cb recv_cb)
 		}
 
 		ret = bt_pacs_set_available_contexts(BT_AUDIO_DIR_SINK,
-				BT_AUDIO_CONTEXT_TYPE_MEDIA |
-				BT_AUDIO_CONTEXT_TYPE_CONVERSATIONAL |
-				BT_AUDIO_CONTEXT_TYPE_UNSPECIFIED);
+						     BT_AUDIO_CONTEXT_TYPE_MEDIA |
+							     BT_AUDIO_CONTEXT_TYPE_CONVERSATIONAL |
+							     BT_AUDIO_CONTEXT_TYPE_UNSPECIFIED);
 		if (ret) {
 			LOG_ERR("Available context set failed. Err%d: %d", ret);
 			return ret;
 		}
 
 		ret = bt_pacs_set_supported_contexts(BT_AUDIO_DIR_SOURCE,
-				BT_AUDIO_CONTEXT_TYPE_MEDIA |
-				BT_AUDIO_CONTEXT_TYPE_CONVERSATIONAL |
-				BT_AUDIO_CONTEXT_TYPE_UNSPECIFIED);
+						     BT_AUDIO_CONTEXT_TYPE_MEDIA |
+							     BT_AUDIO_CONTEXT_TYPE_CONVERSATIONAL |
+							     BT_AUDIO_CONTEXT_TYPE_UNSPECIFIED);
 
 		if (ret) {
 			LOG_ERR("Supported context set failed. Err: %d", ret);
@@ -651,9 +658,9 @@ static int initialize(le_audio_receive_cb recv_cb)
 		}
 
 		ret = bt_pacs_set_available_contexts(BT_AUDIO_DIR_SOURCE,
-				BT_AUDIO_CONTEXT_TYPE_MEDIA |
-				BT_AUDIO_CONTEXT_TYPE_CONVERSATIONAL |
-				BT_AUDIO_CONTEXT_TYPE_UNSPECIFIED);
+						     BT_AUDIO_CONTEXT_TYPE_MEDIA |
+							     BT_AUDIO_CONTEXT_TYPE_CONVERSATIONAL |
+							     BT_AUDIO_CONTEXT_TYPE_UNSPECIFIED);
 		if (ret) {
 			LOG_ERR("Available context set failed. Err: %d", ret);
 			return ret;
@@ -680,8 +687,8 @@ static int initialize(le_audio_receive_cb recv_cb)
 #else
 
 		ret = bt_pacs_set_supported_contexts(BT_AUDIO_DIR_SINK,
-				BT_AUDIO_CONTEXT_TYPE_MEDIA |
-				BT_AUDIO_CONTEXT_TYPE_UNSPECIFIED);
+						     BT_AUDIO_CONTEXT_TYPE_MEDIA |
+							     BT_AUDIO_CONTEXT_TYPE_UNSPECIFIED);
 
 		if (ret) {
 			LOG_ERR("Supported context set failed. Err: %d ", ret);
@@ -689,8 +696,8 @@ static int initialize(le_audio_receive_cb recv_cb)
 		}
 
 		ret = bt_pacs_set_available_contexts(BT_AUDIO_DIR_SINK,
-				BT_AUDIO_CONTEXT_TYPE_MEDIA |
-				BT_AUDIO_CONTEXT_TYPE_UNSPECIFIED);
+						     BT_AUDIO_CONTEXT_TYPE_MEDIA |
+							     BT_AUDIO_CONTEXT_TYPE_UNSPECIFIED);
 		if (ret) {
 			LOG_ERR("Available context set failed. Err: %d", ret);
 			return ret;
@@ -840,7 +847,7 @@ int le_audio_send(struct encoded_audio enc_audio)
 
 	atomic_inc(&iso_tx_pool_alloc);
 	ret = bt_bap_stream_send(sources[0].stream, buf, sources[0].seq_num++,
-				   BT_ISO_TIMESTAMP_NONE);
+				 BT_ISO_TIMESTAMP_NONE);
 	if (ret < 0) {
 		LOG_WRN("Failed to send audio data: %d", ret);
 		net_buf_unref(buf);
