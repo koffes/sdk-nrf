@@ -49,10 +49,10 @@ struct le_audio_headset {
 	uint32_t seq_num;
 	struct bt_bap_stream sink_stream;
 	struct bt_bap_ep *sink_ep;
-	struct bt_codec sink_codec_cap[CONFIG_BT_BAP_UNICAST_CLIENT_PAC_COUNT];
+	struct bt_codec sink_codec_cap[CONFIG_PAC_COUNT_MAX];
 	struct bt_bap_stream source_stream;
 	struct bt_bap_ep *source_ep;
-	struct bt_codec source_codec_cap[CONFIG_BT_BAP_UNICAST_CLIENT_PAC_COUNT];
+	struct bt_codec source_codec_cap[CONFIG_PAC_COUNT_MAX];
 	struct bt_conn *headset_conn;
 	struct net_buf_pool *iso_tx_pool;
 	atomic_t iso_tx_pool_alloc;
@@ -66,15 +66,10 @@ struct worker_data {
 	uint8_t retries;
 } __aligned(4);
 
-struct data_storage {
-	struct bt_codec codec;
-	uint8_t data[CONFIG_BT_CODEC_MAX_DATA_COUNT][CONFIG_BT_CODEC_MAX_DATA_LEN];
-};
-
 struct temp_cap_storage {
 	struct bt_conn *conn;
 	/* Must be the same size as sink_codec_cap and source_codec_cap */
-	struct data_storage cap[CONFIG_BT_BAP_UNICAST_CLIENT_PAC_COUNT];
+	struct bt_codec codec[CONFIG_PAC_COUNT_MAX];
 };
 
 static struct le_audio_headset headsets[CONFIG_BT_MAX_CONN];
@@ -570,20 +565,19 @@ static void discover_sink_cb(struct bt_conn *conn, struct bt_codec *codec, struc
 			return;
 		}
 
-		if (params->num_caps < ARRAY_SIZE(temp_cap[temp_cap_index].cap)) {
-			/* params->num_caps is an increasing index that starts at 0 */
+		/* params->num_caps is an increasing index that starts at 0 */
+		if (params->num_caps < ARRAY_SIZE(temp_cap[temp_cap_index].codec)) {
+			struct bt_codec *store_loc =
+				&temp_cap[temp_cap_index].codec[params->num_caps];
 
-			memcpy(&(temp_cap[temp_cap_index].cap[params->num_caps].codec), codec,
-			       sizeof(struct bt_codec));
+			memcpy(store_loc, codec, sizeof(struct bt_codec));
 
 			for (int i = 0; i < codec->data_count; i++) {
-				memcpy(&temp_cap[temp_cap_index].cap[params->num_caps].data[i],
-				       codec->data[i].data.data, codec->data[i].data.data_len);
-				temp_cap[temp_cap_index]
-					.cap[params->num_caps]
-					.codec.data[i]
-					.data.data =
-					temp_cap[temp_cap_index].cap[params->num_caps].data[i];
+				store_loc->data[i].data.data = store_loc->data[i].value;
+			}
+
+			for (int i = 0; i < codec->meta_count; i++) {
+				store_loc->meta[i].data.data = store_loc->meta[i].value;
 			}
 		} else {
 			LOG_WRN("No more space for storing capabilities");
@@ -599,9 +593,9 @@ static void discover_sink_cb(struct bt_conn *conn, struct bt_codec *codec, struc
 	}
 
 	/* At this point the location/channel index of the headset is always known */
-	for (int i = 0; i < CONFIG_BT_BAP_UNICAST_CLIENT_PAC_COUNT; i++) {
+	for (int i = 0; i < CONFIG_PAC_COUNT_MAX; i++) {
 		memcpy(&headsets[channel_index].sink_codec_cap[i],
-		       &temp_cap[temp_cap_index].cap[i].codec, (sizeof(struct bt_codec)));
+		       &temp_cap[temp_cap_index].codec, (sizeof(struct bt_codec)));
 	}
 
 	if (ep != NULL) {
@@ -644,7 +638,7 @@ static void discover_sink_cb(struct bt_conn *conn, struct bt_codec *codec, struc
 	}
 
 	/* Free up the slot in temp_cap */
-	memset(temp_cap[temp_cap_index].cap, 0, sizeof(temp_cap[temp_cap_index].cap));
+	memset(temp_cap[temp_cap_index].codec, 0, sizeof(temp_cap[temp_cap_index].codec));
 	temp_cap[temp_cap_index].conn = NULL;
 
 #if CONFIG_STREAM_BIDIRECTIONAL
@@ -684,9 +678,9 @@ static void discover_source_cb(struct bt_conn *conn, struct bt_codec *codec, str
 			return;
 		}
 
-		if (params->num_caps < ARRAY_SIZE(temp_cap[temp_cap_index].cap)) {
+		if (params->num_caps < ARRAY_SIZE(temp_cap[temp_cap_index].codec)) {
 			/* params->num_caps is an increasing index that starts at 0 */
-			temp_cap[temp_cap_index].cap[params->num_caps] = *codec;
+			temp_cap[temp_cap_index].codec[params->num_caps] = *codec;
 		} else {
 			LOG_WRN("No more space for storing capabilities");
 		}
@@ -701,8 +695,8 @@ static void discover_source_cb(struct bt_conn *conn, struct bt_codec *codec, str
 	}
 
 	/* At this point the location/channel index of the headset is always known */
-	memcpy(headsets[channel_index].source_codec_cap, temp_cap[temp_cap_index].cap,
-	       sizeof(temp_cap[temp_cap_index].cap));
+	memcpy(headsets[channel_index].source_codec_cap, temp_cap[temp_cap_index].codec,
+	       sizeof(temp_cap[temp_cap_index].codec));
 
 	if (ep != NULL) {
 		/* params->num_eps is an increasing index that starts at 0 */
@@ -738,7 +732,7 @@ static void discover_source_cb(struct bt_conn *conn, struct bt_codec *codec, str
 	}
 
 	/* Free up the slot in temp_cap */
-	memset(temp_cap[temp_cap_index].cap, 0, sizeof(temp_cap[temp_cap_index].cap));
+	memset(temp_cap[temp_cap_index].codec, 0, sizeof(temp_cap[temp_cap_index].codec));
 	temp_cap[temp_cap_index].conn = NULL;
 }
 #endif /* CONFIG_STREAM_BIDIRECTIONAL */

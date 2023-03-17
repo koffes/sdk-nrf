@@ -230,6 +230,10 @@ config BLE_ISO_RX_STATS_S
 	int "Interval in seconds to print Bluetooth LE ISO RX stats. 0 to deactivate"
 	default 0
 
+config PAC_COUNT_MAX
+	int "change. Need to check sizes"
+	default 5
+
 choice BT_BAP_UNICAST_BAP_CONFIGURATION
 	prompt "Unicast codec configuration"
 	depends on TRANSPORT_CIS
