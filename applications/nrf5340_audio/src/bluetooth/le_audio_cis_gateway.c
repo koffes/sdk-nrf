@@ -21,6 +21,7 @@
 #include "ble_hci_vsc.h"
 #include "ble_audio_services.h"
 #include "channel_assignment.h"
+#include "tmp_cap.h"
 
 #include <zephyr/logging/log.h>
 LOG_MODULE_REGISTER(cis_gateway, CONFIG_BLE_LOG_LEVEL);
@@ -66,12 +67,6 @@ struct worker_data {
 	uint8_t retries;
 } __aligned(4);
 
-struct temp_cap_storage {
-	struct bt_conn *conn;
-	/* Must be the same size as sink_codec_cap and source_codec_cap */
-	struct bt_codec codec[CONFIG_PAC_COUNT_MAX];
-};
-
 static struct le_audio_headset headsets[CONFIG_BT_MAX_CONN];
 
 K_MSGQ_DEFINE(kwork_msgq, sizeof(struct worker_data),
@@ -79,7 +74,7 @@ K_MSGQ_DEFINE(kwork_msgq, sizeof(struct worker_data),
 		   CONFIG_BT_BAP_UNICAST_CLIENT_ASE_SRC_COUNT),
 	      sizeof(uint32_t));
 
-static struct temp_cap_storage temp_cap[CONFIG_BT_MAX_CONN];
+static struct tmp_cap_storage tmp_cap_sink[CONFIG_BT_MAX_CONN];
 
 /* Make sure that we have at least one headset device per CONFIG_BT_BAP_UNICAST_CLIENT_ASE_SNK */
 BUILD_ASSERT(ARRAY_SIZE(headsets) >= CONFIG_BT_BAP_UNICAST_CLIENT_ASE_SNK_COUNT,
@@ -484,33 +479,6 @@ static void work_stream_start(struct k_work *work)
 	}
 }
 
-static int temp_cap_index_get(struct bt_conn *conn, uint8_t *index)
-{
-	if (conn == NULL) {
-		LOG_ERR("No conn provided");
-		return -EINVAL;
-	}
-
-	for (int i = 0; i < ARRAY_SIZE(temp_cap); i++) {
-		if (temp_cap[i].conn == conn) {
-			*index = i;
-			return 0;
-		}
-	}
-
-	/* Connection not found in temp_cap, searching for empty slot */
-	for (int i = 0; i < ARRAY_SIZE(temp_cap); i++) {
-		if (temp_cap[i].conn == NULL) {
-			temp_cap[i].conn = conn;
-			*index = i;
-			return 0;
-		}
-	}
-
-	LOG_WRN("No more space in temp_cap");
-
-	return -ECANCELED;
-}
 
 /**
  * @brief  Check if the gateway can support the headset codec capabilities
@@ -529,6 +497,7 @@ static bool valid_codec_cap_check(struct bt_codec cap_array[], size_t size)
 	/* Only the sampling frequency is checked */
 	for (int i = 0; i < size; i++) {
 		if (bt_codec_get_val(&cap_array[i], BT_CODEC_LC3_FREQ, &element)) {
+			LOG_WRN("freq is %d", element->data.data[0]);
 			if (element->data.data[0] & BT_AUDIO_CODEC_CAPABILIY_FREQ) {
 				return true;
 			}
@@ -541,9 +510,10 @@ static bool valid_codec_cap_check(struct bt_codec cap_array[], size_t size)
 static void discover_sink_cb(struct bt_conn *conn, struct bt_codec *codec, struct bt_bap_ep *ep,
 			     struct bt_bap_unicast_client_discover_params *params)
 {
+	/* params->num_caps is an increasing index that starts at 0 */
+
 	int ret = 0;
 	uint8_t channel_index = 0;
-	uint8_t temp_cap_index = 0;
 
 	if (params->err == BT_ATT_ERR_ATTRIBUTE_NOT_FOUND) {
 		LOG_INF("No sinks found");
@@ -553,36 +523,16 @@ static void discover_sink_cb(struct bt_conn *conn, struct bt_codec *codec, struc
 		return;
 	}
 
-	ret = temp_cap_index_get(conn, &temp_cap_index);
-	if (ret) {
-		LOG_ERR("Could not get temporary CAP storage index");
-		return;
-	}
-
 	if (codec != NULL) {
 		if (codec->id != BT_CODEC_LC3_ID) {
-			LOG_DBG("Only the LC3 codec is supported");
+			LOG_WRN("Only the LC3 codec is supported");
 			return;
 		}
-
-		/* params->num_caps is an increasing index that starts at 0 */
-		if (params->num_caps < ARRAY_SIZE(temp_cap[temp_cap_index].codec)) {
-			struct bt_codec *store_loc =
-				&temp_cap[temp_cap_index].codec[params->num_caps];
-
-			memcpy(store_loc, codec, sizeof(struct bt_codec));
-
-			for (int i = 0; i < codec->data_count; i++) {
-				store_loc->data[i].data.data = store_loc->data[i].value;
-			}
-
-			for (int i = 0; i < codec->meta_count; i++) {
-				store_loc->meta[i].data.data = store_loc->meta[i].value;
-			}
-		} else {
-			LOG_WRN("No more space for storing capabilities");
+		
+		ret = tmp_cap_push(tmp_cap_sink, conn, params->num_caps, codec);
+		if (ret) {
+			LOG_ERR("Could not push to temp_cap");
 		}
-
 		return;
 	}
 
@@ -594,8 +544,14 @@ static void discover_sink_cb(struct bt_conn *conn, struct bt_codec *codec, struc
 
 	/* At this point the location/channel index of the headset is always known */
 	for (int i = 0; i < CONFIG_PAC_COUNT_MAX; i++) {
-		memcpy(&headsets[channel_index].sink_codec_cap[i],
-		       &temp_cap[temp_cap_index].codec, (sizeof(struct bt_codec)));
+		struct bt_codec* tmp_codec = NULL;
+		ret = tmp_cap_peek(tmp_cap_sink, conn, i, tmp_codec);
+		if (ret) {
+			LOG_ERR("tmp_cap_peek failed");
+			return;
+		}
+
+		memcpy(&headsets[channel_index].sink_codec_cap[i], tmp_codec, sizeof(struct bt_codec));
 	}
 
 	if (ep != NULL) {
@@ -637,9 +593,11 @@ static void discover_sink_cb(struct bt_conn *conn, struct bt_codec *codec, struc
 			headsets[channel_index].ch_name);
 	}
 
-	/* Free up the slot in temp_cap */
-	memset(temp_cap[temp_cap_index].codec, 0, sizeof(temp_cap[temp_cap_index].codec));
-	temp_cap[temp_cap_index].conn = NULL;
+	ret = tmp_cap_erase(tmp_cap_sink, conn);
+	if (ret) {
+		LOG_ERR("Could not erase temp_cap");
+		return;
+	}
 
 #if CONFIG_STREAM_BIDIRECTIONAL
 	ret = discover_source(conn);
@@ -656,7 +614,7 @@ static void discover_source_cb(struct bt_conn *conn, struct bt_codec *codec, str
 	int ret = 0;
 
 	uint8_t channel_index = 0;
-	uint8_t temp_cap_index = 0;
+	uint8_t tmp_cap_index = 0;
 
 	if (params->err == BT_ATT_ERR_ATTRIBUTE_NOT_FOUND) {
 		LOG_INF("No sources found");
@@ -666,7 +624,7 @@ static void discover_source_cb(struct bt_conn *conn, struct bt_codec *codec, str
 		return;
 	}
 
-	ret = temp_cap_index_get(conn, &temp_cap_index);
+	ret = tmp_cap_index_get(conn, &tmp_cap_index);
 	if (ret) {
 		LOG_ERR("Could not get temporary CAP storage index");
 		return;
@@ -678,9 +636,9 @@ static void discover_source_cb(struct bt_conn *conn, struct bt_codec *codec, str
 			return;
 		}
 
-		if (params->num_caps < ARRAY_SIZE(temp_cap[temp_cap_index].codec)) {
+		if (params->num_caps < ARRAY_SIZE(temp_cap[tmp_cap_index].codec)) {
 			/* params->num_caps is an increasing index that starts at 0 */
-			temp_cap[temp_cap_index].codec[params->num_caps] = *codec;
+			temp_cap[tmp_cap_index].codec[params->num_caps] = *codec;
 		} else {
 			LOG_WRN("No more space for storing capabilities");
 		}
@@ -695,8 +653,8 @@ static void discover_source_cb(struct bt_conn *conn, struct bt_codec *codec, str
 	}
 
 	/* At this point the location/channel index of the headset is always known */
-	memcpy(headsets[channel_index].source_codec_cap, temp_cap[temp_cap_index].codec,
-	       sizeof(temp_cap[temp_cap_index].codec));
+	memcpy(headsets[channel_index].source_codec_cap, temp_cap[tmp_cap_index].codec,
+	       sizeof(temp_cap[tmp_cap_index].codec));
 
 	if (ep != NULL) {
 		/* params->num_eps is an increasing index that starts at 0 */
@@ -732,8 +690,8 @@ static void discover_source_cb(struct bt_conn *conn, struct bt_codec *codec, str
 	}
 
 	/* Free up the slot in temp_cap */
-	memset(temp_cap[temp_cap_index].codec, 0, sizeof(temp_cap[temp_cap_index].codec));
-	temp_cap[temp_cap_index].conn = NULL;
+	memset(temp_cap[tmp_cap_index].codec, 0, sizeof(temp_cap[tmp_cap_index].codec));
+	temp_cap[tmp_cap_index].conn = NULL;
 }
 #endif /* CONFIG_STREAM_BIDIRECTIONAL */
 
