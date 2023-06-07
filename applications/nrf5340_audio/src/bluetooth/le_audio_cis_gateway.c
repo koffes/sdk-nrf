@@ -29,8 +29,8 @@ ZBUS_CHAN_DEFINE(le_audio_chan, struct le_audio_msg, NULL, NULL, ZBUS_OBSERVERS_
 		 ZBUS_MSG_INIT(0));
 
 #define HCI_ISO_BUF_ALLOC_PER_CHAN 2
-#define CIS_CONN_RETRY_TIMES 5
-#define CIS_CONN_RETRY_DELAY_MS 500
+#define CIS_CONN_RETRY_TIMES	   5
+#define CIS_CONN_RETRY_DELAY_MS	   500
 
 /* For being able to dynamically define iso_tx_pools */
 #define NET_BUF_POOL_ITERATE(i, _)                                                                 \
@@ -657,7 +657,9 @@ static void work_stream_start(struct k_work *work)
 		}
 	} else if (ret != 0) {
 		LOG_ERR("Failed to establish CIS, ret = %d", ret);
-		/* Defining the connection as having nonvalid configs, since it is not possible to start stream */
+		/** Defining the connection as having nonvalid configs, since it is not possible to
+		 *  start stream
+		 */
 		nonvalid_configs_cb(headsets[work_data.channel_index].headset_conn);
 	}
 }
@@ -1352,7 +1354,7 @@ int le_audio_send(struct encoded_audio enc_audio)
 {
 	int ret;
 	size_t data_size_pr_stream;
-	struct bt_iso_tx_info tx_info = { 0 };
+	struct bt_iso_tx_info tx_info = {0};
 
 	if ((enc_audio.num_ch == 1) || (enc_audio.num_ch == ARRAY_SIZE(headsets))) {
 		data_size_pr_stream = enc_audio.size / enc_audio.num_ch;
