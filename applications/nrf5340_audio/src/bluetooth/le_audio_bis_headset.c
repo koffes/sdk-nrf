@@ -19,6 +19,7 @@
 #include "nrf5340_audio_common.h"
 #include "hw_codec.h"
 #include "channel_assignment.h"
+#include "bt_mgmt.h"
 
 #include <zephyr/logging/log.h>
 LOG_MODULE_REGISTER(bis_headset, CONFIG_BLE_LOG_LEVEL);
@@ -574,6 +575,16 @@ int le_audio_user_defined_button_press(enum le_audio_user_defined_action action)
 	return ret;
 }
 
+void le_audio_conn_disconnected(struct bt_conn *conn)
+{
+	LOG_WRN("No conn used in BIS");
+}
+
+void le_audio_conn_set(struct bt_conn *conn)
+{
+	LOG_WRN("No conn used in BIS");
+}
+
 int le_audio_config_get(uint32_t *bitrate, uint32_t *sampling_rate, uint32_t *pres_delay)
 {
 	if (active_stream.codec == NULL) {
@@ -603,6 +614,12 @@ int le_audio_config_get(uint32_t *bitrate, uint32_t *sampling_rate, uint32_t *pr
 	}
 
 	return 0;
+}
+
+int le_audio_ext_adv_set(struct bt_le_ext_adv *ext_adv)
+{
+	LOG_WRN("No extended advertiser in BIS headset");
+	return -ENOTSUP;
 }
 
 int le_audio_volume_up(void)

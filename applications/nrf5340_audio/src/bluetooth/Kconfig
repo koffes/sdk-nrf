@@ -545,6 +545,10 @@ module = BLE
 module-str = ble
 source "subsys/logging/Kconfig.template.log_config"
 
+module = BT_MGMT
+module-str = bt_mgmt
+source "subsys/logging/Kconfig.template.log_config"
+
 module = AUDIO_SERVICES
 module-str = audio-services
 source "subsys/logging/Kconfig.template.log_config"

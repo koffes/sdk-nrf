@@ -615,6 +615,11 @@ int le_audio_config_get(uint32_t *bitrate, uint32_t *sampling_rate, uint32_t *pr
 	return 0;
 }
 
+void le_audio_conn_disconnected(struct bt_conn *conn)
+{
+	LOG_DBG("Not used");
+}
+
 void le_audio_conn_set(struct bt_conn *conn)
 {
 	default_conn = conn;
@@ -626,6 +631,12 @@ void le_audio_adv_get(const struct bt_data **adv, size_t *adv_size, bool periodi
 
 	*adv = ad_peer;
 	*adv_size = ARRAY_SIZE(ad_peer);
+}
+
+int le_audio_ext_adv_set(struct bt_le_ext_adv *ext_adv)
+{
+	LOG_DBG("No need for ext_adv in CIS headset");
+	return -ENOTSUP;
 }
 
 int le_audio_volume_up(void)

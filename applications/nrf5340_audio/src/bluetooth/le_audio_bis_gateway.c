@@ -282,6 +282,16 @@ static void bt_codec_allocation_set(struct bt_codec_data *codec, enum bt_audio_l
 	codec->data.data_len = 4;
 }
 
+void le_audio_conn_disconnected(struct bt_conn *conn)
+{
+	LOG_WRN("No conn used in BIS");
+}
+
+void le_audio_conn_set(struct bt_conn *conn)
+{
+	LOG_WRN("No conn used in BIS");
+}
+
 int le_audio_ext_adv_set(struct bt_le_ext_adv *ext_adv)
 {
 	int ret;
@@ -446,8 +456,8 @@ int le_audio_enable(le_audio_receive_cb recv_cb, le_audio_timestamp_cb timestmp_
 		    le_audio_nonvalid_iso_cfgs_cb nonvalid_cfgs_cb)
 {
 	int ret;
-	struct bt_codec_data bis_codec_data[ARRAY_SIZE(stream_params)];
 	struct bt_bap_broadcast_source_stream_param stream_params[ARRAY_SIZE(audio_streams)];
+	struct bt_codec_data bis_codec_data[ARRAY_SIZE(stream_params)];
 	struct bt_bap_broadcast_source_subgroup_param
 		subgroup_params[CONFIG_BT_BAP_BROADCAST_SRC_SUBGROUP_COUNT];
 	struct bt_bap_broadcast_source_create_param create_param;

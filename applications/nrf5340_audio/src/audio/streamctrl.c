@@ -25,8 +25,7 @@
 #include "data_fifo.h"
 #include "board.h"
 #include "le_audio.h"
-#include "bt_mgmt_adv.h"
-#include "bt_mgmt_scan.h"
+#include "bt_mgmt.h"
 #include "audio_datapath.h"
 
 #include <zephyr/logging/log.h>
@@ -253,7 +252,7 @@ static int test_tone_button_press(void)
 }
 #endif /* (CONFIG_AUDIO_TEST_TONE) */
 
-// TODO: Change to event based approach
+/* TODO: Change to event based approach */
 static void nonvalid_iso_cfgs(struct bt_conn *conn)
 {
 	bt_mgmt_conn_disconnect(conn, BT_HCI_ERR_REMOTE_USER_TERM_CONN);
@@ -442,6 +441,50 @@ static void le_audio_msg_sub_thread(void)
 	}
 }
 
+/**
+ * @brief	Zbus listener to receive events from bt_mgmt
+ *
+ * @note	Will in most cases be called from BT_RX context,
+ *		so there should not be too much processing done here
+ */
+static void bt_mgmt_evt_handler(const struct zbus_channel *chan)
+{
+	const struct bt_mgmt_msg *msg;
+
+	msg = zbus_chan_const_msg(chan);
+	uint8_t event = msg->event;
+
+	switch (event) {
+	case BT_MGMT_CONNECTED:
+		LOG_INF("Connected");
+		break;
+
+	case BT_MGMT_DISCONNECTED:
+		LOG_INF("Disconnected");
+
+		le_audio_conn_disconnected(msg->conn);
+		break;
+
+	case BT_MGMT_EXT_ADV_READY:
+		LOG_INF("Ext adv ready!");
+
+		le_audio_ext_adv_set(msg->ext_adv);
+		break;
+
+	case BT_MGMT_SECURITY_CHANGED:
+		LOG_INF("Security changed");
+
+		le_audio_conn_set(msg->conn);
+		break;
+
+	default:
+		LOG_WRN("Unexpected/unhandled event: %d", event);
+		break;
+	}
+}
+
+ZBUS_LISTENER_DEFINE(bt_mgmt_evt_sub, bt_mgmt_evt_handler);
+
 int streamctrl_start(void)
 {
 	int ret;
@@ -476,12 +519,12 @@ int streamctrl_start(void)
 			      nonvalid_iso_cfgs);
 	ERR_CHK_MSG(ret, "Failed to enable LE Audio");
 
+	ret = bt_mgmt_init();
+	ERR_CHK(ret);
+
 	if ((CONFIG_AUDIO_DEV == HEADSET) && IS_ENABLED(CONFIG_TRANSPORT_CIS)) {
 		size_t ext_adv_size = 0;
 		const struct bt_data *ext_adv = NULL;
-
-		ret = bt_mgmt_adv_init(le_audio_conn_set, NULL);
-		ERR_CHK(ret);
 
 		le_audio_adv_get(&ext_adv, &ext_adv_size, false);
 
@@ -493,9 +536,6 @@ int streamctrl_start(void)
 		const struct bt_data *ext_adv = NULL;
 		const struct bt_data *per_adv = NULL;
 
-		ret = bt_mgmt_adv_init(NULL, le_audio_ext_adv_set);
-		ERR_CHK(ret);
-
 		le_audio_adv_get(&ext_adv, &ext_adv_size, false);
 		le_audio_adv_get(&per_adv, &per_adv_size, true);
 
@@ -503,13 +543,11 @@ int streamctrl_start(void)
 		ERR_CHK(ret);
 	} else if ((CONFIG_AUDIO_DEV == GATEWAY) && IS_ENABLED(CONFIG_TRANSPORT_CIS)) {
 		/* Scan interval and scan window as two times of ISO interval */
-		/* TODO: Make scan interval and scan window dynamic (make a CONFIG for ISO
-		 * interval?)
+		/** TODO: Make scan interval and scan window dynamic (make a CONFIG for ISO
+		 *  interval?)
 		 */
-		ret = bt_mgmt_scan_init(le_audio_conn_set, le_audio_conn_disconnected, 20, 20);
-		ERR_CHK(ret);
 
-		bt_mgmt_scan_start();
+		bt_mgmt_scan_start(0, 0);
 	}
 
 	return 0;

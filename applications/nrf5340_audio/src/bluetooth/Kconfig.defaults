@@ -27,6 +27,15 @@ config BT_EXT_ADV
 config BT_DEVICE_NAME
 	default "NRF5340_AUDIO"
 
+if BT_OBSERVER
+
+config BT_BACKGROUND_SCAN_INTERVAL
+	default 32
+
+config BT_BACKGROUND_SCAN_WINDOW
+	default 32
+endif # BT_OBSERVER
+
 if TRANSPORT_CIS # Depends on TRANSPORT_CIS
 
 config BT_GATT_CLIENT
