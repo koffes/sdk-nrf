@@ -249,6 +249,11 @@ int hw_codec_default_conf_enable(void)
 		return ret;
 	}
 
+	ret = cs47l63_comm_reg_conf_write(drc_test, ARRAY_SIZE(drc_test));
+	if (ret) {
+		return ret;
+	}
+
 	return 0;
 }
 
@@ -278,11 +283,6 @@ int hw_codec_init(void)
 		return ret;
 	}
 
-	/* Run a soft reset on start to make sure all registers are default values */
-	ret = cs47l63_comm_reg_conf_write(soft_reset, ARRAY_SIZE(soft_reset));
-	if (ret) {
-		return ret;
-	}
 	cs47l63_driver.state = CS47L63_STATE_STANDBY;
 
 	return 0;

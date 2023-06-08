@@ -402,6 +402,13 @@ int cs47l63_comm_init(cs47l63_t *cs47l63_driver)
 		return -ENXIO;
 	}
 
+	/* Boot done, clear interrupt flag */
+	ret = cs47l63_update_reg(cs47l63_driver, CS47L63_IRQ1_MASK_2, CS47L63_BOOT_DONE_MASK1,
+				 CS47L63_BOOT_DONE_MASK1);
+	if (ret != CS47L63_STATUS_OK) {
+		return -ENXIO;
+	}
+
 	if (cs47l63_driver->devid != CS47L63_DEVID_VAL) {
 		LOG_ERR("Wrong device id: 0x%02x, should be 0x%02x", cs47l63_driver->devid,
 			CS47L63_DEVID_VAL);
