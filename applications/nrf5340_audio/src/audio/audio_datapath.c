@@ -42,23 +42,23 @@ LOG_MODULE_REGISTER(audio_datapath, CONFIG_AUDIO_DATAPATH_LOG_LEVEL);
 
 /* Total sample FIFO period in microseconds */
 #define FIFO_SMPL_PERIOD_US (CONFIG_AUDIO_MAX_PRES_DLY_US * 2)
-#define FIFO_NUM_BLKS NUM_BLKS(FIFO_SMPL_PERIOD_US)
-#define MAX_FIFO_SIZE (FIFO_NUM_BLKS * BLK_SIZE_SAMPLES(CONFIG_AUDIO_SAMPLE_RATE_HZ) * 2)
+#define FIFO_NUM_BLKS	    NUM_BLKS(FIFO_SMPL_PERIOD_US)
+#define MAX_FIFO_SIZE	    (FIFO_NUM_BLKS * BLK_SIZE_SAMPLES(CONFIG_AUDIO_SAMPLE_RATE_HZ) * 2)
 
 /* Number of audio blocks given a duration */
-#define NUM_BLKS(d) ((d) / BLK_PERIOD_US)
+#define NUM_BLKS(d)	    ((d) / BLK_PERIOD_US)
 /* Single audio block size in number of samples (stereo) */
 #define BLK_SIZE_SAMPLES(r) (((r)*BLK_PERIOD_US) / 1000000)
 /* Increment sample FIFO index by one block */
-#define NEXT_IDX(i) (((i) < (FIFO_NUM_BLKS - 1)) ? ((i) + 1) : 0)
+#define NEXT_IDX(i)	    (((i) < (FIFO_NUM_BLKS - 1)) ? ((i) + 1) : 0)
 /* Decrement sample FIFO index by one block */
-#define PREV_IDX(i) (((i) > 0) ? ((i)-1) : (FIFO_NUM_BLKS - 1))
+#define PREV_IDX(i)	    (((i) > 0) ? ((i)-1) : (FIFO_NUM_BLKS - 1))
 
-#define NUM_BLKS_IN_FRAME NUM_BLKS(CONFIG_AUDIO_FRAME_DURATION_US)
-#define BLK_MONO_NUM_SAMPS BLK_SIZE_SAMPLES(CONFIG_AUDIO_SAMPLE_RATE_HZ)
-#define BLK_STEREO_NUM_SAMPS (BLK_MONO_NUM_SAMPS * 2)
+#define NUM_BLKS_IN_FRAME      NUM_BLKS(CONFIG_AUDIO_FRAME_DURATION_US)
+#define BLK_MONO_NUM_SAMPS     BLK_SIZE_SAMPLES(CONFIG_AUDIO_SAMPLE_RATE_HZ)
+#define BLK_STEREO_NUM_SAMPS   (BLK_MONO_NUM_SAMPS * 2)
 /* Number of octets in a single audio block */
-#define BLK_MONO_SIZE_OCTETS (BLK_MONO_NUM_SAMPS * CONFIG_AUDIO_BIT_DEPTH_OCTETS)
+#define BLK_MONO_SIZE_OCTETS   (BLK_MONO_NUM_SAMPS * CONFIG_AUDIO_BIT_DEPTH_OCTETS)
 #define BLK_STEREO_SIZE_OCTETS (BLK_MONO_SIZE_OCTETS * 2)
 /* How many function calls before moving on with drift compensation */
 #define DRIFT_COMP_WAITING_CNT (DRIFT_MEAS_PERIOD_US / BLK_PERIOD_US)
@@ -67,27 +67,27 @@ LOG_MODULE_REGISTER(audio_datapath, CONFIG_AUDIO_DATAPATH_LOG_LEVEL);
 
 /* Audio clock - nRF5340 Analog Phase-Locked Loop (APLL) */
 #define APLL_FREQ_CENTER 39854
-#define APLL_FREQ_MIN 36834
-#define APLL_FREQ_MAX 42874
+#define APLL_FREQ_MIN	 36834
+#define APLL_FREQ_MAX	 42874
 /* Use nanoseconds to reduce rounding errors */
 #define APLL_FREQ_ADJ(t) (-((t)*1000) / 331)
 
-#define DRIFT_MEAS_PERIOD_US 100000
-#define DRIFT_ERR_THRESH_LOCK 16
+#define DRIFT_MEAS_PERIOD_US	100000
+#define DRIFT_ERR_THRESH_LOCK	16
 #define DRIFT_ERR_THRESH_UNLOCK 32
 
 /* 3000 us to allow BLE transmission and (host -> HCI -> controller) */
-#define JUST_IN_TIME_US (CONFIG_AUDIO_FRAME_DURATION_US - 3000)
+#define JUST_IN_TIME_US		  (CONFIG_AUDIO_FRAME_DURATION_US - 3000)
 #define JUST_IN_TIME_THRESHOLD_US 1500
 
 /* How often to print underrun warning */
 #define UNDERRUN_LOG_INTERVAL_BLKS 5000
 
 enum drift_comp_state {
-	DRIFT_STATE_INIT, /* Waiting for data to be received */
-	DRIFT_STATE_CALIB, /* Calibrate and zero out local delay */
+	DRIFT_STATE_INIT,   /* Waiting for data to be received */
+	DRIFT_STATE_CALIB,  /* Calibrate and zero out local delay */
 	DRIFT_STATE_OFFSET, /* Adjust I2S offset relative to SDU Reference */
-	DRIFT_STATE_LOCKED /* Drift compensation locked - Minor corrections */
+	DRIFT_STATE_LOCKED  /* Drift compensation locked - Minor corrections */
 };
 
 static const char *const drift_comp_state_names[] = {
@@ -98,9 +98,9 @@ static const char *const drift_comp_state_names[] = {
 };
 
 enum pres_comp_state {
-	PRES_STATE_INIT, /* Initialize presentation compensation */
-	PRES_STATE_MEAS, /* Measure presentation delay */
-	PRES_STATE_WAIT, /* Wait for some time */
+	PRES_STATE_INIT,  /* Initialize presentation compensation */
+	PRES_STATE_MEAS,  /* Measure presentation delay */
+	PRES_STATE_WAIT,  /* Wait for some time */
 	PRES_STATE_LOCKED /* Presentation compensation locked */
 };
 
@@ -137,7 +137,7 @@ static struct {
 	uint32_t current_pres_dly_us;
 
 	struct {
-		enum drift_comp_state state : 8;
+		enum drift_comp_state state: 8;
 		uint16_t ctr; /* Count func calls. Used for waiting */
 		uint32_t meas_start_time_us;
 		uint32_t center_freq;
@@ -145,7 +145,7 @@ static struct {
 	} drift_comp;
 
 	struct {
-		enum pres_comp_state state : 8;
+		enum pres_comp_state state: 8;
 		uint16_t ctr; /* Count func calls. Used for collecting data points and waiting */
 		int32_t sum_err_dly_us;
 		uint32_t pres_delay_us;
@@ -899,6 +899,7 @@ int audio_datapath_start(struct data_fifo *fifo_rx)
 {
 	__ASSERT_NO_MSG(fifo_rx != NULL);
 
+	LOG_WRN("Stream started");
 	if (!ctrl_blk.datapath_initialized) {
 		LOG_WRN("Audio datapath not initialized");
 		return -ECANCELED;
@@ -932,6 +933,72 @@ int audio_datapath_stop(void)
 	} else {
 		return -EALREADY;
 	}
+}
+
+static uint32_t frame_start_ts_static;
+K_SEM_DEFINE(blk_complete, 0, 1);
+
+static void audio_datapath_single_i2s_blk_complete(uint32_t frame_start_ts,
+						   uint32_t *rx_buf_released,
+						   uint32_t const *tx_buf_released)
+{
+	/* No need to re-populate buffers as the one frame we need has been sent */
+	frame_start_ts_static = frame_start_ts;
+	k_sem_give(&blk_complete);
+}
+
+/* Will send one frame of square wave */
+int audio_datapath_play_square_i2s_ts_get(uint32_t *ts)
+{
+	int ret;
+
+	if (!ctrl_blk.datapath_initialized) {
+		LOG_ERR("Audio datapath not initialized");
+		return -ECANCELED;
+	}
+
+	if (ctrl_blk.stream_started) {
+		LOG_ERR("Stream already running");
+		return -EALREADY;
+	}
+
+	audio_i2s_blk_comp_cb_register(audio_datapath_single_i2s_blk_complete);
+	uint8_t *tx_buf_one = NULL;
+	uint8_t *tx_buf_two = NULL;
+	uint32_t *rx_buf_one = NULL; /* No RX in this mode */
+	uint32_t *rx_buf_two = NULL; /* No RX in this mode */
+
+	alt_buffer_get((void **)&tx_buf_one);
+	alt_buffer_get((void **)&tx_buf_two);
+
+	uint8_t square_wave_stereo_16[] = {0xAF, 0xAF, 0xAF, 0xAF, 0x00, 0x00, 0x00, 0x00};
+	uint8_t square_wave_stereo_32[] = {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF,
+					   0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00};
+
+	uint32_t finite_pos;
+	if (IS_ENABLED(CONFIG_AUDIO_BIT_DEPTH_16)) {
+		ret = contin_array_create(tx_buf_one, BLK_STEREO_SIZE_OCTETS, square_wave_stereo_16,
+					  ARRAY_SIZE(square_wave_stereo_16), &finite_pos);
+	} else if (IS_ENABLED(CONFIG_AUDIO_BIT_DEPTH_32)) {
+		ret = contin_array_create(tx_buf_one, BLK_STEREO_SIZE_OCTETS, square_wave_stereo_32,
+					  ARRAY_SIZE(square_wave_stereo_32), &finite_pos);
+	}
+
+	memset(tx_buf_two, 0, BLK_STEREO_SIZE_OCTETS);
+
+	audio_i2s_start(tx_buf_one, rx_buf_one);
+	audio_i2s_set_next_buf(tx_buf_two, rx_buf_two);
+
+	ctrl_blk.stream_started = true;
+	k_sem_take(&blk_complete, K_FOREVER);
+
+	ret = audio_datapath_stop();
+	/* Restore standard callback */
+	audio_i2s_blk_comp_cb_register(audio_datapath_i2s_blk_complete);
+
+	*ts = frame_start_ts_static;
+	alt_buffer_free_both();
+	return 0;
 }
 
 int audio_datapath_init(void)
@@ -1071,24 +1138,23 @@ static int cmd_audio_pres_comp_disable(const struct shell *shell, size_t argc, c
 	return 0;
 }
 
-SHELL_STATIC_SUBCMD_SET_CREATE(
-	test_cmd,
-	SHELL_COND_CMD(CONFIG_SHELL, nrf_tone_start, NULL, "Start local tone from nRF5340",
-		       cmd_i2s_tone_play),
-	SHELL_COND_CMD(CONFIG_SHELL, nrf_tone_stop, NULL, "Stop local tone from nRF5340",
-		       cmd_i2s_tone_stop),
-	SHELL_COND_CMD(CONFIG_SHELL, pll_drift_comp_enable, NULL,
-		       "Enable audio PLL auto drift compensation (default)",
-		       cmd_hfclkaudio_drift_comp_enable),
-	SHELL_COND_CMD(CONFIG_SHELL, pll_drift_comp_disable, NULL,
-		       "Disable audio PLL auto drift compensation",
-		       cmd_hfclkaudio_drift_comp_disable),
-	SHELL_COND_CMD(CONFIG_SHELL, pll_pres_comp_enable, NULL,
-		       "Enable audio presentation compensation (default)",
-		       cmd_audio_pres_comp_enable),
-	SHELL_COND_CMD(CONFIG_SHELL, pll_pres_comp_disable, NULL,
-		       "Disable audio presentation compensation",
-		       cmd_audio_pres_comp_disable),
-	SHELL_SUBCMD_SET_END);
+SHELL_STATIC_SUBCMD_SET_CREATE(test_cmd,
+			       SHELL_COND_CMD(CONFIG_SHELL, nrf_tone_start, NULL,
+					      "Start local tone from nRF5340", cmd_i2s_tone_play),
+			       SHELL_COND_CMD(CONFIG_SHELL, nrf_tone_stop, NULL,
+					      "Stop local tone from nRF5340", cmd_i2s_tone_stop),
+			       SHELL_COND_CMD(CONFIG_SHELL, pll_drift_comp_enable, NULL,
+					      "Enable audio PLL auto drift compensation (default)",
+					      cmd_hfclkaudio_drift_comp_enable),
+			       SHELL_COND_CMD(CONFIG_SHELL, pll_drift_comp_disable, NULL,
+					      "Disable audio PLL auto drift compensation",
+					      cmd_hfclkaudio_drift_comp_disable),
+			       SHELL_COND_CMD(CONFIG_SHELL, pll_pres_comp_enable, NULL,
+					      "Enable audio presentation compensation (default)",
+					      cmd_audio_pres_comp_enable),
+			       SHELL_COND_CMD(CONFIG_SHELL, pll_pres_comp_disable, NULL,
+					      "Disable audio presentation compensation",
+					      cmd_audio_pres_comp_disable),
+			       SHELL_SUBCMD_SET_END);
 
 SHELL_CMD_REGISTER(test, &test_cmd, "Test mode commands", NULL);

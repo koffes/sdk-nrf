@@ -87,18 +87,18 @@ const uint32_t line_in_enable[][2] = {
 	{CS47L63_IN2R_CONTROL1, 0x10000000},
 
 	/* Un-mute and set gain to 0dB */
-	{CS47L63_IN2L_CONTROL2, 0x800080},
-	{CS47L63_IN2R_CONTROL2, 0x800080},
+	//{CS47L63_IN2L_CONTROL2, 0x800080},
+	//{CS47L63_IN2R_CONTROL2, 0x800080},
 
 	/* Enable IN2L and IN2R */
-	{CS47L63_INPUT_CONTROL, 0x000F},
+	//{CS47L63_INPUT_CONTROL, 0x000F},
 
 	/* Volume Update */
 	{CS47L63_INPUT_CONTROL3, 0x20000000},
 
 	/* Route IN2L and IN2R to I2S */
-	{CS47L63_ASP1TX1_INPUT1, 0x800012},
-	{CS47L63_ASP1TX2_INPUT1, 0x800013},
+	//{CS47L63_ASP1TX1_INPUT1, 0x800012},
+	//{CS47L63_ASP1TX2_INPUT1, 0x800013},
 };
 
 /* Set up output */
@@ -154,9 +154,39 @@ const uint32_t soft_reset[][2] = {
 };
 
 const uint32_t drc_test[][2] = {
-	{CS47L63_DRC1_CONTROL2, 0x49130058},
-	{CS47L63_DRC1_CONTROL1, 0x0002},
-	{CS47L63_DRC1L_INPUT1, 0x800020},
+	//{CS47L63_DRC1_CONTROL2, 0x49130058},
+	//{CS47L63_DRC1_CONTROL1, 0x0002},
+	//{CS47L63_DRC1L_INPUT1, 0x800020},
+
+	/* Unmask DRC1 signal detect interrupt */
+	//{CS47L63_IRQ1_MASK_5, 0x3E0000}, // Did give results, but in the ms area,
+
+	// ASRC1: GAve an interrupt before the clocks have even started.
+	//{CS47L63_ASRC1_IN1L_INPUT1, 0x0020},
+	//{CS47L63_IRQ1_MASK_10, 0x013C3000},
+	//{CS47L63_ASRC1_ENABLE, 0x2},
+
+	// Signal detect on input path:
+	// From table Table 4-6: Seems that 4-8 ms is the minimum here, and only works for analog
+	// inputs.
+
+	// USING the PWM:
+	{0xC000, 0x0001},
+	{0x8080, 0x800020},
+	{0xC28, 0x61000080},
+
+	// Loopback RX to TX
+	{0x8204, 0x800020},
+	{0x8218, 0x800021},
+
+	// Event log 1 FIFO not empty
+	//{0xC28, 0x61000158},
+
 };
 
 #endif /* _CS47L63_REG_CONF_H_ */
+
+//   0x18134 0x13E3000 4wireSPI_32inx_32dat_32pad  Write  0x00      * IRQ1_MASK_10(18134H): 13E3000
+//   LSRC2_LOCK_FALL_MASK1=1, LSRC2_LOCK_RISE_MASK1=1, ASRC1_IN2_LOCK_FALL_MASK1=1,
+//   ASRC1_IN2_LOCK_RISE_MASK1=1, ASRC1_IN1_LOCK_FALL_MASK1=1, ASRC1_IN1_LOCK_RISE_MASK1=0,
+//   LSRC3_LOCK_FALL_MASK1=1, LSRC3_LOCK_RISE_MASK1=1

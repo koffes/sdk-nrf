@@ -9,8 +9,13 @@
 #include <zephyr/kernel.h>
 #include <zephyr/device.h>
 #include <zephyr/drivers/pinctrl.h>
+#include <zephyr/drivers/timer/system_timer.h>
+#include <zephyr/sys_clock.h>
 #include <nrfx_i2s.h>
 #include <nrfx_clock.h>
+
+#include <zephyr/logging/log.h>
+LOG_MODULE_REGISTER(audio_i2s, 4);
 
 #include "nrf5340_audio_common.h"
 
@@ -62,6 +67,8 @@ static nrfx_i2s_config_t cfg = {
 
 static i2s_blk_comp_callback_t i2s_blk_comp_callback;
 
+static uint32_t first_tx = 8;
+
 static void i2s_comp_handler(nrfx_i2s_buffers_t const *released_bufs, uint32_t status)
 {
 	uint32_t frame_start_ts = nrfx_timer_capture_get(
@@ -71,6 +78,11 @@ static void i2s_comp_handler(nrfx_i2s_buffers_t const *released_bufs, uint32_t s
 	    i2s_blk_comp_callback && (released_bufs->p_rx_buffer || released_bufs->p_tx_buffer)) {
 		i2s_blk_comp_callback(frame_start_ts, released_bufs->p_rx_buffer,
 				      released_bufs->p_tx_buffer);
+	}
+
+	if (first_tx) {
+		LOG_WRN("ticks are %d", frame_start_ts);
+		first_tx--;
 	}
 }
 
@@ -85,8 +97,8 @@ void audio_i2s_set_next_buf(const uint8_t *tx_buf, uint32_t *rx_buf)
 		__ASSERT_NO_MSG(tx_buf != NULL);
 	}
 
-	const nrfx_i2s_buffers_t i2s_buf = { .p_rx_buffer = rx_buf,
-					     .p_tx_buffer = (uint32_t *)tx_buf };
+	const nrfx_i2s_buffers_t i2s_buf = {.p_rx_buffer = rx_buf,
+					    .p_tx_buffer = (uint32_t *)tx_buf};
 
 	nrfx_err_t ret;
 
@@ -105,8 +117,8 @@ void audio_i2s_start(const uint8_t *tx_buf, uint32_t *rx_buf)
 		__ASSERT_NO_MSG(tx_buf != NULL);
 	}
 
-	const nrfx_i2s_buffers_t i2s_buf = { .p_rx_buffer = rx_buf,
-					     .p_tx_buffer = (uint32_t *)tx_buf };
+	const nrfx_i2s_buffers_t i2s_buf = {.p_rx_buffer = rx_buf,
+					    .p_tx_buffer = (uint32_t *)tx_buf};
 
 	nrfx_err_t ret;
 

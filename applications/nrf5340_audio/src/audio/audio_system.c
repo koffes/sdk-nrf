@@ -303,11 +303,10 @@ void audio_system_start(void)
 	sw_codec_cfg.initialized = true;
 
 	if (sw_codec_cfg.encoder.enabled && encoder_thread_id == NULL) {
-		encoder_thread_id =
-			k_thread_create(&encoder_thread_data, encoder_thread_stack,
-					CONFIG_ENCODER_STACK_SIZE, (k_thread_entry_t)encoder_thread,
-					NULL, NULL, NULL,
-					K_PRIO_PREEMPT(CONFIG_ENCODER_THREAD_PRIO), 0, K_NO_WAIT);
+		encoder_thread_id = k_thread_create(
+			&encoder_thread_data, encoder_thread_stack, CONFIG_ENCODER_STACK_SIZE,
+			(k_thread_entry_t)encoder_thread, NULL, NULL, NULL,
+			K_PRIO_PREEMPT(CONFIG_ENCODER_THREAD_PRIO), 0, K_NO_WAIT);
 		ret = k_thread_name_set(encoder_thread_id, "ENCODER");
 		ERR_CHK(ret);
 	}
@@ -318,6 +317,11 @@ void audio_system_start(void)
 #else
 	ret = hw_codec_default_conf_enable();
 	ERR_CHK(ret);
+
+	uint32_t ts;
+	ret = audio_datapath_play_square_i2s_ts_get(&ts);
+	ERR_CHK(ret);
+	LOG_WRN("Ts is %d", ts);
 
 	ret = audio_datapath_start(&fifo_rx);
 	ERR_CHK(ret);

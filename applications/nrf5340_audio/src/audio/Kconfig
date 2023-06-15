@@ -121,7 +121,7 @@ config AUDIO_MAX_PRES_DLY_US
 choice AUDIO_SOURCE_GATEWAY
 	prompt "Audio source for gateway"
 	default AUDIO_SOURCE_I2S if WALKIE_TALKIE_DEMO
-	default AUDIO_SOURCE_USB
+	default AUDIO_SOURCE_I2S
 	help
 	  Select audio source for the gateway.
 

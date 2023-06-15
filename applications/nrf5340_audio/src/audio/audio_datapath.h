@@ -91,6 +91,8 @@ int audio_datapath_start(struct data_fifo *fifo_rx);
  */
 int audio_datapath_stop(void);
 
+int audio_datapath_play_square_i2s_ts_get(uint32_t *ts);
+
 /**
  * @brief Initialize the audio datapath module
  *
