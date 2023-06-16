@@ -990,7 +990,10 @@ int audio_datapath_play_square_i2s_ts_get(uint32_t *ts)
 	audio_i2s_set_next_buf(tx_buf_two, rx_buf_two);
 
 	ctrl_blk.stream_started = true;
-	k_sem_take(&blk_complete, K_FOREVER);
+	ret = k_sem_take(&blk_complete, K_MSEC(10));
+	if (ret) {
+		LOG_ERR("Semaphore take timed out");
+	}
 
 	ret = audio_datapath_stop();
 	/* Restore standard callback */

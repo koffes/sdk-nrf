@@ -8,6 +8,9 @@
 
 #include <zephyr/kernel.h>
 #include <zephyr/shell/shell.h>
+#include <zephyr/drivers/gpio.h>
+#include <nrfx_timer.h>
+#include <stdio.h>
 
 #include "macros_common.h"
 #include "sw_codec_select.h"
@@ -272,6 +275,91 @@ int audio_decode(void const *const encoded_data, size_t encoded_data_size, bool 
 	return 0;
 }
 
+const static struct device *gpio_dev = DEVICE_DT_GET_OR_NULL(DT_NODELABEL(gpio0));
+
+static struct gpio_callback pwm_cb;
+/*
+static nrfx_timer_config_t cfg = {.frequency = NRF_TIMER_FREQ_1MHz,
+				  .mode = NRF_TIMER_MODE_TIMER,
+				  .bit_width = NRF_TIMER_BIT_WIDTH_32,
+				  .interrupt_priority = NRFX_TIMER_DEFAULT_CONFIG_IRQ_PRIORITY,
+				  .p_context = NULL};
+*/
+
+#define NUM_DELTAS 50
+const nrfx_timer_t pwm_timer = NRFX_TIMER_INSTANCE(1);
+static uint32_t deltas[NUM_DELTAS];
+static uint32_t counter;
+
+static void print_results_worker(struct k_work *work)
+{
+	char results[300];
+
+	for (int i = 0; i < NUM_DELTAS; i++) {
+		char temp[12];
+		sprintf(temp, "%d ", deltas[i]);
+		strcat(results, temp);
+		// LOG_WRN("delta: %d", deltas[i]);
+	}
+	LOG_WRN("Result: %s", results);
+}
+
+K_WORK_DEFINE(print_results, print_results_worker);
+
+static void pwm_int_handler(const struct device *gpio_dev, struct gpio_callback *cb, uint32_t pins)
+{
+
+	static uint32_t last_ts;
+	uint32_t ts = nrfx_timer_capture(&pwm_timer, 0);
+
+	if (counter < ARRAY_SIZE(deltas)) {
+		deltas[counter] = ts - last_ts;
+	}
+
+	if (counter == NUM_DELTAS) {
+		k_work_submit(&print_results);
+	}
+
+	counter++;
+	last_ts = ts;
+}
+
+static void event_handler(nrf_timer_event_t event_type, void *ctx)
+{
+}
+
+static int pwm_detection_start()
+{
+	int ret;
+
+	/*
+	ret = nrfx_timer_init(&pwm_timer, &cfg, event_handler);
+	if (ret - NRFX_ERROR_BASE_NUM) {
+		LOG_ERR("nrfx timer init error - Return value: %d", ret - NRFX_ERROR_BASE_NUM);
+		return ret;
+	}
+
+	nrfx_timer_enable(&pwm_timer);
+*/
+	gpio_port_pins_t pin_mask = BIT(20);
+
+	gpio_pin_configure(gpio_dev, 20, GPIO_INPUT);
+	gpio_init_callback(&pwm_cb, pwm_int_handler, pin_mask);
+
+	ret = gpio_add_callback(gpio_dev, &pwm_cb); // somethign strange
+	if (ret) {
+		LOG_ERR("error on the add callback");
+		return ret;
+	}
+
+	ret = gpio_pin_interrupt_configure(gpio_dev, 20, GPIO_INT_EDGE_BOTH);
+	if (ret) {
+		return ret;
+	}
+
+	return 0;
+}
+
 /**@brief Initializes the FIFOs, the codec, and starts the I2S
  */
 void audio_system_start(void)
@@ -318,10 +406,15 @@ void audio_system_start(void)
 	ret = hw_codec_default_conf_enable();
 	ERR_CHK(ret);
 
+#if (CONFIG_AUDIO_DEV == HEADSET) /* TODO: must be removed */
+	ret = pwm_detection_start();
+	ERR_CHK(ret);
+
 	uint32_t ts;
 	ret = audio_datapath_play_square_i2s_ts_get(&ts);
 	ERR_CHK(ret);
 	LOG_WRN("Ts is %d", ts);
+#endif
 
 	ret = audio_datapath_start(&fifo_rx);
 	ERR_CHK(ret);

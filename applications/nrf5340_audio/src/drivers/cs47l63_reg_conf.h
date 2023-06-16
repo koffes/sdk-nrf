@@ -171,9 +171,10 @@ const uint32_t drc_test[][2] = {
 	// inputs.
 
 	// USING the PWM:
-	{0xC000, 0x0001},
+	
 	{0x8080, 0x800020},
 	{0xC28, 0x61000080},
+	{0xC000, 0x0001},
 
 	// Loopback RX to TX
 	{0x8204, 0x800020},
