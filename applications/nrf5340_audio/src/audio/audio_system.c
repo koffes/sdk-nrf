@@ -286,39 +286,90 @@ static nrfx_timer_config_t cfg = {.frequency = NRF_TIMER_FREQ_1MHz,
 				  .p_context = NULL};
 */
 
-#define NUM_DELTAS 50
-const nrfx_timer_t pwm_timer = NRFX_TIMER_INSTANCE(1);
+#define NUM_DELTAS 300
+static const nrfx_timer_t pwm_timer = NRFX_TIMER_INSTANCE(1);
 static uint32_t deltas[NUM_DELTAS];
 static uint32_t counter;
 
+static uint32_t captured_pwm_transition_ts;
+
 static void print_results_worker(struct k_work *work)
 {
-	char results[300];
 
-	for (int i = 0; i < NUM_DELTAS; i++) {
-		char temp[12];
-		sprintf(temp, "%d ", deltas[i]);
-		strcat(results, temp);
-		// LOG_WRN("delta: %d", deltas[i]);
+	for (int i = 0; i < NUM_DELTAS; i = i + 10) {
+
+		LOG_WRN("Result: %d %d %d %d %d %d %d %d %d %d", deltas[i + 0], deltas[i + 1],
+			deltas[i + 2], deltas[i + 3], deltas[i + 4], deltas[i + 5], deltas[i + 6],
+			deltas[i + 7], deltas[i + 8], deltas[i + 9]);
 	}
-	LOG_WRN("Result: %s", results);
+
+	uint32_t *frame_start_ts_array;
+	uint32_t num_timestamps = audio_i2s_frame_start_ts_array_get(&frame_start_ts_array);
+
+	LOG_WRN("frame start ts array size %d:", num_timestamps);
+	LOG_WRN("%d %d %d %d %d %d %d", frame_start_ts_array[0], frame_start_ts_array[1],
+		frame_start_ts_array[2], frame_start_ts_array[3], frame_start_ts_array[4],
+		frame_start_ts_array[5], frame_start_ts_array[6]);
+
+	LOG_WRN("HW CODEC LATENCY us: %d", captured_pwm_transition_ts - frame_start_ts_array[2]);
 }
 
 K_WORK_DEFINE(print_results, print_results_worker);
 
-static void pwm_int_handler(const struct device *gpio_dev, struct gpio_callback *cb, uint32_t pins)
+ISR_DIRECT_DECLARE(pin_isr)
 {
 
+	static bool first = true;
+	if (first) {
+		// LOG_WRN("direct ISR");
+		first = false;
+	}
+
+	ISR_DIRECT_PM(); /* PM done after servicing interrupt for best latency */
+	return 1;	 /* We should check if scheduling decision should be made */
+}
+
+static void pwm_int_handler(const struct device *gpio_dev, struct gpio_callback *cb, uint32_t pins)
+{
+	int ret;
 	static uint32_t last_ts;
+	uint32_t delta;
 	uint32_t ts = nrfx_timer_capture(&pwm_timer, 0);
+	delta = ts - last_ts;
+	static bool captured = false;
 
 	if (counter < ARRAY_SIZE(deltas)) {
-		deltas[counter] = ts - last_ts;
+		deltas[counter] = delta;
+	}
+
+	if ((delta < 13 && delta > 1) || (delta > 19 && delta < 35)) {
+		if (captured == false) {
+			LOG_WRN("Captured time out: %d", ts);
+			captured = true;
+			captured_pwm_transition_ts = ts;
+		}
 	}
 
 	if (counter == NUM_DELTAS) {
 		k_work_submit(&print_results);
 	}
+
+	/*
+		if ((counter % 50) == 0) {
+			ret = gpio_pin_set_raw(gpio_dev, 4, 1);
+			if (ret) {
+				LOG_ERR("Failed to set gpio state, ret: %d", ret);
+				return;
+			}
+		} else if ((counter % 50) == 1) {
+			ret = gpio_pin_set_raw(gpio_dev, 4, 0);
+			if (ret) {
+				LOG_ERR("Failed to set gpio state, ret: %d", ret);
+				return;
+			}
+		}
+	*/
+	// Set pin to get timings
 
 	counter++;
 	last_ts = ts;
@@ -328,9 +379,12 @@ static void event_handler(nrf_timer_event_t event_type, void *ctx)
 {
 }
 
+#define MY_DEV_IRQ  GPIOTE1_IRQn
+#define MY_DEV_PRIO 2 /* device uses interrupt priority 2 */
+/* argument passed to my_isr(), in this case a pointer to the device */
+
 static int pwm_detection_start()
 {
-	int ret;
 
 	/*
 	ret = nrfx_timer_init(&pwm_timer, &cfg, event_handler);
@@ -341,23 +395,36 @@ static int pwm_detection_start()
 
 	nrfx_timer_enable(&pwm_timer);
 */
-	gpio_port_pins_t pin_mask = BIT(20);
 
+	/* // This hangs for some reason
+		IRQ_DIRECT_CONNECT(NRFX_IRQ_NUMBER_GET(NRF_GPIOTE), IRQ_PRIO_LOWEST, pin_isr,
+				   0); // IRQ_ZERO_LATENCY can be added
+		irq_enable(NRFX_IRQ_NUMBER_GET(NRF_GPIOTE));
+	*/
+
+	gpio_port_pins_t pin_mask = BIT(20);
+	gpio_pin_configure(gpio_dev, 4, GPIO_OUTPUT);
 	gpio_pin_configure(gpio_dev, 20, GPIO_INPUT);
 	gpio_init_callback(&pwm_cb, pwm_int_handler, pin_mask);
-
-	ret = gpio_add_callback(gpio_dev, &pwm_cb); // somethign strange
-	if (ret) {
-		LOG_ERR("error on the add callback");
-		return ret;
-	}
-
-	ret = gpio_pin_interrupt_configure(gpio_dev, 20, GPIO_INT_EDGE_BOTH);
-	if (ret) {
-		return ret;
-	}
+	gpio_pin_set_raw(gpio_dev, 4, 0);
 
 	return 0;
+}
+
+/* Called once when the first I2S block has been sent*/
+static void first_blck_tx_cb(void)
+{
+	int ret;
+	LOG_WRN("First TX done");
+	ret = gpio_add_callback(gpio_dev, &pwm_cb);
+	if (ret) {
+		LOG_ERR("error on the add callback");
+	}
+
+	ret = gpio_pin_interrupt_configure(gpio_dev, 20, GPIO_INT_EDGE_FALLING);
+	if (ret) {
+		LOG_ERR("error on the add callback");
+	}
 }
 
 /**@brief Initializes the FIFOs, the codec, and starts the I2S
@@ -407,13 +474,15 @@ void audio_system_start(void)
 	ERR_CHK(ret);
 
 #if (CONFIG_AUDIO_DEV == HEADSET) /* TODO: must be removed */
+
 	ret = pwm_detection_start();
 	ERR_CHK(ret);
 
 	uint32_t ts;
-	ret = audio_datapath_play_square_i2s_ts_get(&ts);
+	ret = audio_datapath_play_square_i2s_ts_get(&ts, first_blck_tx_cb);
 	ERR_CHK(ret);
 	LOG_WRN("Ts is %d", ts);
+
 #endif
 
 	ret = audio_datapath_start(&fifo_rx);

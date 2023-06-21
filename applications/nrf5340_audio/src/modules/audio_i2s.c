@@ -13,6 +13,7 @@
 #include <zephyr/sys_clock.h>
 #include <nrfx_i2s.h>
 #include <nrfx_clock.h>
+#include <zephyr/drivers/gpio.h>
 
 #include <zephyr/logging/log.h>
 LOG_MODULE_REGISTER(audio_i2s, 4);
@@ -67,12 +68,25 @@ static nrfx_i2s_config_t cfg = {
 
 static i2s_blk_comp_callback_t i2s_blk_comp_callback;
 
-static uint32_t first_tx = 8;
+uint32_t frame_start_ts_array[20] = {0};
+
+static uint32_t num_tx;
+
+const static struct device *gpio_dev = DEVICE_DT_GET_OR_NULL(DT_NODELABEL(gpio0));
+
+uint32_t audio_i2s_frame_start_ts_array_get(uint32_t **timestamps)
+{
+
+	*timestamps = frame_start_ts_array;
+	return num_tx;
+}
 
 static void i2s_comp_handler(nrfx_i2s_buffers_t const *released_bufs, uint32_t status)
 {
+	int ret;
 	uint32_t frame_start_ts = nrfx_timer_capture_get(
 		&audio_sync_timer_instance, AUDIO_SYNC_TIMER_I2S_FRAME_START_EVT_CAPTURE_CHANNEL);
+	// uint32_t frame_start_ts = nrfx_timer_capture(&pwm_timer, 0);
 
 	if ((status == NRFX_I2S_STATUS_NEXT_BUFFERS_NEEDED) && released_bufs &&
 	    i2s_blk_comp_callback && (released_bufs->p_rx_buffer || released_bufs->p_tx_buffer)) {
@@ -80,10 +94,30 @@ static void i2s_comp_handler(nrfx_i2s_buffers_t const *released_bufs, uint32_t s
 				      released_bufs->p_tx_buffer);
 	}
 
-	if (first_tx) {
-		LOG_WRN("ticks are %d", frame_start_ts);
-		first_tx--;
+	if (num_tx < ARRAY_SIZE(frame_start_ts_array)) {
+		frame_start_ts_array[num_tx] = frame_start_ts;
 	}
+
+	if (num_tx < 6) {
+		LOG_WRN("ticks are %d. Num_tx %d", frame_start_ts, num_tx);
+	}
+
+	if ((num_tx % 1) == 0) {
+		ret = gpio_pin_set_raw(gpio_dev, 4, 1);
+		if (ret) {
+			LOG_ERR("Failed to set gpio state, ret: %d", ret);
+			return;
+		}
+	} else if ((num_tx % 1) == 1) {
+		ret = gpio_pin_set_raw(gpio_dev, 4, 0);
+		if (ret) {
+			LOG_ERR("Failed to set gpio state, ret: %d", ret);
+			return;
+		}
+	}
+
+	num_tx++;
+	// toggle a pin here
 }
 
 void audio_i2s_set_next_buf(const uint8_t *tx_buf, uint32_t *rx_buf)

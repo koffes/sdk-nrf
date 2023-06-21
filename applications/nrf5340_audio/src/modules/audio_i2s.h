@@ -44,6 +44,8 @@
 typedef void (*i2s_blk_comp_callback_t)(uint32_t frame_start_ts, uint32_t *rx_buf_released,
 					uint32_t const *tx_buf_released);
 
+uint32_t audio_i2s_frame_start_ts_array_get(uint32_t **timestamps);
+
 /**
  * @brief Supply the buffers to be used in the next part of the I2S transfer
  *

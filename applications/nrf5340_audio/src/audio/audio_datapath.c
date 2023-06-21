@@ -752,6 +752,19 @@ static void audio_datapath_just_in_time_check_and_adjust(uint32_t sdu_ref_us)
 	}
 }
 
+int audio_datapath_pres_delay_us_add(int32_t delay_change_us)
+{
+	if (abs(delay_change_us) > 500) {
+		LOG_ERR("The change is too large");
+		return -1;
+	}
+
+	ctrl_blk.pres_comp.pres_delay_us = ctrl_blk.pres_comp.pres_delay_us + delay_change_us;
+
+	LOG_WRN("Presentation delay set to %d us. changed by %d", ctrl_blk.pres_comp.pres_delay_us,
+		delay_change_us);
+}
+
 int audio_datapath_pres_delay_us_set(uint32_t delay_us)
 {
 	if (!IN_RANGE(delay_us, CONFIG_AUDIO_MIN_PRES_DLY_US, CONFIG_AUDIO_MAX_PRES_DLY_US)) {
@@ -761,7 +774,7 @@ int audio_datapath_pres_delay_us_set(uint32_t delay_us)
 
 	ctrl_blk.pres_comp.pres_delay_us = delay_us;
 
-	LOG_DBG("Presentation delay set to %d us", delay_us);
+	LOG_WRN("Presentation delay set to %d us", ctrl_blk.pres_comp.pres_delay_us);
 
 	return 0;
 }
@@ -936,7 +949,12 @@ int audio_datapath_stop(void)
 }
 
 static uint32_t frame_start_ts_static;
-K_SEM_DEFINE(blk_complete, 0, 1);
+static K_SEM_DEFINE(blk_complete, 0, 1);
+static first_i2s_tx_done_t first_blck_compl;
+
+uint8_t __aligned(WB_UP(1)) buf_latency_test[BLK_STEREO_SIZE_OCTETS];
+
+static uint32_t num_tx;
 
 static void audio_datapath_single_i2s_blk_complete(uint32_t frame_start_ts,
 						   uint32_t *rx_buf_released,
@@ -944,13 +962,36 @@ static void audio_datapath_single_i2s_blk_complete(uint32_t frame_start_ts,
 {
 	/* No need to re-populate buffers as the one frame we need has been sent */
 	frame_start_ts_static = frame_start_ts;
-	k_sem_give(&blk_complete);
+
+	if (num_tx == 1) {
+		first_blck_compl();
+	}
+
+	uint8_t *tx_buf = NULL;
+	alt_buffer_free(tx_buf_released);
+
+	if (num_tx == 0) {
+		tx_buf = buf_latency_test;
+	} else {
+		alt_buffer_get((void **)&tx_buf);
+		memset(tx_buf, 0, BLK_STEREO_SIZE_OCTETS);
+	}
+
+	audio_i2s_set_next_buf(tx_buf, NULL);
+
+	if (num_tx == 50) {
+		k_sem_give(&blk_complete);
+	}
+
+	num_tx++;
 }
 
 /* Will send one frame of square wave */
-int audio_datapath_play_square_i2s_ts_get(uint32_t *ts)
+int audio_datapath_play_square_i2s_ts_get(uint32_t *ts, first_i2s_tx_done_t first_blck_compl_cb)
 {
 	int ret;
+
+	first_blck_compl = first_blck_compl_cb;
 
 	if (!ctrl_blk.datapath_initialized) {
 		LOG_ERR("Audio datapath not initialized");
@@ -962,35 +1003,36 @@ int audio_datapath_play_square_i2s_ts_get(uint32_t *ts)
 		return -EALREADY;
 	}
 
-	audio_i2s_blk_comp_cb_register(audio_datapath_single_i2s_blk_complete);
-	uint8_t *tx_buf_one = NULL;
-	uint8_t *tx_buf_two = NULL;
-	uint32_t *rx_buf_one = NULL; /* No RX in this mode */
-	uint32_t *rx_buf_two = NULL; /* No RX in this mode */
-
-	alt_buffer_get((void **)&tx_buf_one);
-	alt_buffer_get((void **)&tx_buf_two);
-
 	uint8_t square_wave_stereo_16[] = {0xAF, 0xAF, 0xAF, 0xAF, 0x00, 0x00, 0x00, 0x00};
 	uint8_t square_wave_stereo_32[] = {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF,
 					   0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00};
 
 	uint32_t finite_pos;
 	if (IS_ENABLED(CONFIG_AUDIO_BIT_DEPTH_16)) {
-		ret = contin_array_create(tx_buf_one, BLK_STEREO_SIZE_OCTETS, square_wave_stereo_16,
-					  ARRAY_SIZE(square_wave_stereo_16), &finite_pos);
+		ret = contin_array_create(buf_latency_test, BLK_STEREO_SIZE_OCTETS,
+					  square_wave_stereo_16, ARRAY_SIZE(square_wave_stereo_16),
+					  &finite_pos);
 	} else if (IS_ENABLED(CONFIG_AUDIO_BIT_DEPTH_32)) {
-		ret = contin_array_create(tx_buf_one, BLK_STEREO_SIZE_OCTETS, square_wave_stereo_32,
-					  ARRAY_SIZE(square_wave_stereo_32), &finite_pos);
+		ret = contin_array_create(buf_latency_test, BLK_STEREO_SIZE_OCTETS,
+					  square_wave_stereo_32, ARRAY_SIZE(square_wave_stereo_32),
+					  &finite_pos);
 	}
 
+	audio_i2s_blk_comp_cb_register(audio_datapath_single_i2s_blk_complete);
+	uint8_t *tx_buf_one = NULL;
+	uint8_t *tx_buf_two = NULL;
+
+	alt_buffer_get((void **)&tx_buf_one);
+	alt_buffer_get((void **)&tx_buf_two);
+
+	memset(tx_buf_one, 0, BLK_STEREO_SIZE_OCTETS);
 	memset(tx_buf_two, 0, BLK_STEREO_SIZE_OCTETS);
 
-	audio_i2s_start(tx_buf_one, rx_buf_one);
-	audio_i2s_set_next_buf(tx_buf_two, rx_buf_two);
+	audio_i2s_start(tx_buf_one, NULL);
+	audio_i2s_set_next_buf(tx_buf_two, NULL);
 
 	ctrl_blk.stream_started = true;
-	ret = k_sem_take(&blk_complete, K_MSEC(10));
+	ret = k_sem_take(&blk_complete, K_MSEC(100));
 	if (ret) {
 		LOG_ERR("Semaphore take timed out");
 	}

@@ -195,7 +195,6 @@ static uint32_t cs47l63_comm_gpio_set(uint32_t gpio_id, uint8_t gpio_state)
 	int ret;
 
 	ret = gpio_pin_set_raw(gpio_dev, gpio_id, gpio_state);
-
 	if (ret) {
 		LOG_ERR("Failed to set gpio state, ret: %d", ret);
 		return BSP_STATUS_FAIL;
