@@ -143,11 +143,11 @@ void bt_mgmt_scan_start(int scan_intvl, int scan_win)
 	static int scan_interval = CONFIG_BT_BACKGROUND_SCAN_INTERVAL;
 	static int scan_window = CONFIG_BT_BACKGROUND_SCAN_WINDOW;
 
-	if (scan_interval != 0) {
+	if (scan_intvl != 0) {
 		scan_interval = scan_intvl;
 	}
 
-	if (scan_window != 0) {
+	if (scan_win != 0) {
 		scan_window = scan_win;
 	}
 
@@ -167,6 +167,7 @@ void bt_mgmt_scan_start(int scan_intvl, int scan_win)
 	ret = bt_le_scan_start(scan_param, on_device_found);
 	if (ret && ret != -EALREADY) {
 		LOG_ERR("Scanning failed to start: %d", ret);
+		return;
 	}
 
 	LOG_INF("Scanning successfully started");
