@@ -10,14 +10,25 @@
 #include <zephyr/bluetooth/bluetooth.h>
 #include <zephyr/bluetooth/conn.h>
 #include <zephyr/bluetooth/hci.h>
+#include <zephyr/settings/settings.h>
+#include <zephyr/sys/byteorder.h>
 
 #include "macros_common.h"
 #include "nrf5340_audio_common.h"
 #include "ble_audio_services.h"
 #include "ble_hci_vsc.h"
+#include "button_handler.h"
+#include "button_assignments.h"
 
 #include <zephyr/logging/log.h>
 LOG_MODULE_REGISTER(bt_mgmt, CONFIG_BT_MGMT_LOG_LEVEL);
+
+/* The bt_enable should take less than 15 ms.
+ * Buffer added as this will not add to bootup time
+ */
+#define BT_ENABLE_TIMEOUT_MS 100
+K_SEM_DEFINE(sem_bt_enabled, 0, 1);
+static struct bt_le_oob _oob = {.addr = 0};
 
 ZBUS_CHAN_DEFINE(bt_mgmt_chan, struct bt_mgmt_msg, NULL, NULL, ZBUS_OBSERVERS_EMPTY,
 		 ZBUS_MSG_INIT(0));
@@ -94,7 +105,6 @@ static void connected_cb(struct bt_conn *conn, uint8_t err)
 			conn_tx_pwr = CONFIG_NRF_21540_MAIN_DBM;
 		} else {
 			conn_tx_pwr = CONFIG_BLE_CONN_TX_POWER_DBM;
-
 		}
 
 		ret = ble_hci_vsc_conn_tx_pwr_set(conn_handle, conn_tx_pwr);
@@ -200,8 +210,123 @@ void bt_mgmt_conn_disconnect(struct bt_conn *conn, uint8_t reason)
 	}
 }
 
+static void bt_enabled_cb(int err)
+{
+	if (err) {
+		LOG_ERR("Bluetooth init failed (err code: %d)", err);
+		ERR_CHK(err);
+	}
+	k_sem_give(&sem_bt_enabled);
+
+	LOG_DBG("Bluetooth initialized");
+}
+
+static int bonding_clear_check(void)
+{
+	int ret;
+	bool pressed;
+
+	ret = button_pressed(BUTTON_5, &pressed);
+	if (ret) {
+		return ret;
+	}
+
+	if (pressed) {
+		if (IS_ENABLED(CONFIG_SETTINGS)) {
+			LOG_INF("Clearing all bonds");
+			bt_unpair(BT_ID_DEFAULT, NULL);
+		}
+	}
+	return 0;
+}
+
+static void mac_print(void)
+{
+	/* It may be confusing to print the MAC when privacy is enabled.
+	 * This address will change. Have a look at BT_LOG_SNIFFER_INFO for debugging
+	 * and sniffer purposes
+	 */
+
+	char dev[BT_ADDR_LE_STR_LEN];
+	/* This call will create a new RPA */
+	(void)bt_le_oob_get_local(BT_ID_DEFAULT, &_oob);
+	(void)bt_addr_le_to_str(&_oob.addr, dev, BT_ADDR_LE_STR_LEN);
+	if (IS_ENABLED(CONFIG_BT_PRIVACY)) {
+		LOG_INF("MAC: %s Valid until next RPA timeout", dev);
+	} else {
+		LOG_INF("MAC: %s", dev);
+	}
+}
+
+static int random_static_addr_cfg(void)
+{
+	int ret;
+	static bt_addr_le_t addr;
+
+	if ((NRF_FICR->INFO.DEVICEID[0] != UINT32_MAX) ||
+	    ((NRF_FICR->INFO.DEVICEID[1] & UINT16_MAX) != UINT16_MAX)) {
+		/* Put the device ID from FICR into address */
+		sys_put_le32(NRF_FICR->INFO.DEVICEID[0], &addr.a.val[0]);
+		sys_put_le16(NRF_FICR->INFO.DEVICEID[1], &addr.a.val[4]);
+
+		/* The FICR value is a just a random number, with no knowledge
+		 * of the Bluetooth Specification requirements for random
+		 * static addresses.
+		 */
+		BT_ADDR_SET_STATIC(&addr.a);
+
+		addr.type = BT_ADDR_LE_RANDOM;
+
+		ret = bt_id_create(&addr, NULL);
+		if (ret < 0) {
+			LOG_ERR("Failed to create ID %d", ret);
+			return ret;
+		}
+
+	} else {
+		LOG_WRN("Unable to read from FICR");
+		/* If no address can be created based on FICR,
+		 * then a random address is created
+		 */
+		return -ENXIO;
+	}
+	return 0;
+}
+
 int bt_mgmt_init(void)
 {
+	int ret;
+
+	if (!IS_ENABLED(CONFIG_BT_PRIVACY)) {
+		ret = random_static_addr_cfg();
+		if (ret) {
+			return ret;
+		}
+	}
+
+	ret = bt_enable(bt_enabled_cb);
+	if (ret) {
+		return ret;
+	}
+
+	ret = k_sem_take(&sem_bt_enabled, K_MSEC(BT_ENABLE_TIMEOUT_MS));
+	if (ret) {
+		LOG_ERR("bt_enable timed out");
+		return ret;
+	}
+
+	if (IS_ENABLED(CONFIG_SETTINGS)) {
+		ret = settings_load();
+		if (ret) {
+			return ret;
+		}
+
+		ret = bonding_clear_check();
+		if (ret) {
+			return ret;
+		}
+	}
+
 	if (IS_ENABLED(CONFIG_BT_CONN)) {
 		bt_conn_cb_register(&conn_callbacks);
 	}
@@ -209,6 +334,8 @@ int bt_mgmt_init(void)
 	if (IS_ENABLED(CONFIG_BT_PERIPHERAL) || IS_ENABLED(CONFIG_BT_BROADCASTER)) {
 		bt_mgmt_adv_init();
 	}
+
+	mac_print();
 
 	return 0;
 }

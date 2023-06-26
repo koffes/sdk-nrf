@@ -10,7 +10,6 @@
 #include <string.h>
 
 #include <zephyr/bluetooth/bluetooth.h>
-#include <zephyr/settings/settings.h>
 #include <zephyr/zbus/zbus.h>
 
 #include "macros_common.h"
@@ -38,7 +37,6 @@ LOG_MODULE_REGISTER(main, CONFIG_MAIN_LOG_LEVEL);
 extern struct k_thread z_main_thread;
 #endif /* defined(CONFIG_INIT_STACKS) */
 
-static atomic_t ble_core_is_ready = (atomic_t) false;
 static struct board_version board_rev;
 
 ZBUS_CHAN_DECLARE(button_chan);
@@ -104,25 +102,6 @@ static int leds_set(void)
 	return 0;
 }
 
-static int bonding_clear_check(void)
-{
-	int ret;
-	bool pressed;
-
-	ret = button_pressed(BUTTON_5, &pressed);
-	if (ret) {
-		return ret;
-	}
-
-	if (pressed) {
-		if (IS_ENABLED(CONFIG_SETTINGS)) {
-			LOG_INF("Clearing all bonds");
-			bt_unpair(BT_ID_DEFAULT, NULL);
-		}
-	}
-	return 0;
-}
-
 static int channel_assign_check(void)
 {
 #if (CONFIG_AUDIO_DEV == HEADSET) && CONFIG_AUDIO_HEADSET_CHANNEL_RUNTIME
@@ -151,21 +130,6 @@ static int channel_assign_check(void)
 #endif
 
 	return 0;
-}
-
-/* Callback from ble_core when the ble subsystem is ready */
-void on_ble_core_ready(void)
-{
-	int ret;
-
-	(void)atomic_set(&ble_core_is_ready, (atomic_t) true);
-
-	if (IS_ENABLED(CONFIG_SETTINGS)) {
-		settings_load();
-
-		ret = bonding_clear_check();
-		ERR_CHK(ret);
-	}
 }
 
 int main(void)
@@ -222,15 +186,6 @@ int main(void)
 	/* Check DFU BTN before initialize BLE */
 	dfu_entry_check((void *)ble_core_init);
 #endif
-
-	/* Initialize BLE, with callback for when BLE is ready */
-	ret = ble_core_init(on_ble_core_ready);
-	ERR_CHK(ret);
-
-	/* Wait until ble_core/NET core is ready */
-	while (!(bool)atomic_get(&ble_core_is_ready)) {
-		(void)k_sleep(K_MSEC(100));
-	}
 
 	ret = leds_set();
 	ERR_CHK(ret);

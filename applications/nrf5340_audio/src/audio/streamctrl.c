@@ -28,6 +28,7 @@
 #include "bt_mgmt.h"
 #include "bt_rend.h"
 #include "audio_datapath.h"
+#include "bt_ctrl_cfg.h"
 
 #include <zephyr/logging/log.h>
 LOG_MODULE_REGISTER(streamctrl, CONFIG_STREAMCTRL_LOG_LEVEL);
@@ -523,12 +524,15 @@ int streamctrl_start(void)
 	ret = k_thread_name_set(audio_datapath_thread_id, "AUDIO DATAPATH");
 	ERR_CHK(ret);
 
+	ret = bt_mgmt_init();
+	ERR_CHK(ret);
+
+	ret = bt_ctrl_cfg(true);
+	ERR_CHK(ret);
+
 	ret = le_audio_enable(le_audio_rx_data_handler, audio_datapath_sdu_ref_update,
 			      nonvalid_iso_cfgs);
 	ERR_CHK_MSG(ret, "Failed to enable LE Audio");
-
-	ret = bt_mgmt_init();
-	ERR_CHK(ret);
 
 	ret = bt_rend_init();
 	ERR_CHK(ret);

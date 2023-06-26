@@ -4,6 +4,8 @@
  * SPDX-License-Identifier: LicenseRef-Nordic-5-Clause
  */
 
+/* be gone bad file */
+
 #include "ble_core.h"
 
 #include <zephyr/kernel.h>
@@ -25,7 +27,6 @@ LOG_MODULE_REGISTER(ble, CONFIG_BLE_LOG_LEVEL);
 #define NET_CORE_WATCHDOG_TIME_MS 1000
 
 static ble_core_ready_t m_ready_callback;
-static struct bt_le_oob _oob = {.addr = 0};
 
 static void net_core_timeout_handler(struct k_timer *timer_id);
 static void net_core_watchdog_handler(struct k_timer *timer_id);
@@ -43,48 +44,6 @@ static void net_core_timeout_handler(struct k_timer *timer_id)
 	ERR_CHK_MSG(-EIO, "No response from NET core, check if NET core is programmed");
 }
 
-#if !(CONFIG_BT_PRIVACY)
-/* Use unique FICR device ID to set random static address */
-static void ble_core_setup_random_static_addr(void)
-{
-	int ret;
-	static bt_addr_le_t addr;
-
-	if ((NRF_FICR->INFO.DEVICEID[0] != UINT32_MAX) ||
-	    ((NRF_FICR->INFO.DEVICEID[1] & UINT16_MAX) != UINT16_MAX)) {
-		/* Put the device ID from FICR into address */
-		sys_put_le32(NRF_FICR->INFO.DEVICEID[0], &addr.a.val[0]);
-		sys_put_le16(NRF_FICR->INFO.DEVICEID[1], &addr.a.val[4]);
-
-		/* The FICR value is a just a random number, with no knowledge
-		 * of the Bluetooth Specification requirements for random
-		 * static addresses.
-		 */
-		BT_ADDR_SET_STATIC(&addr.a);
-
-		addr.type = BT_ADDR_LE_RANDOM;
-
-		ret = bt_id_create(&addr, NULL);
-		if (ret) {
-			LOG_WRN("Failed to create ID");
-		}
-	} else {
-		LOG_WRN("Unable to read from FICR");
-		/* If no address can be created based on FICR,
-		 * then a random address is created
-		 */
-	}
-}
-#endif /* !(CONFIG_BT_PRIVACY) */
-
-static void mac_print(void)
-{
-	char dev[BT_ADDR_LE_STR_LEN];
-	(void)bt_le_oob_get_local(BT_ID_DEFAULT, &_oob);
-	(void)bt_addr_le_to_str(&_oob.addr, dev, BT_ADDR_LE_STR_LEN);
-	LOG_INF("MAC: %s", dev);
-}
-
 static int ble_core_le_lost_notify_enable(void)
 {
 	return ble_hci_vsc_op_flag_set(BLE_HCI_VSC_OP_ISO_LOST_NOTIFY, 1);
@@ -95,14 +54,6 @@ static void on_bt_ready(int err)
 {
 	int ret;
 	uint16_t ctrl_version = 0;
-
-	if (err) {
-		LOG_ERR("Bluetooth init failed (err %d)", err);
-		ERR_CHK(err);
-	}
-
-	LOG_DBG("Bluetooth initialized");
-	mac_print();
 
 	ret = net_core_ctrl_version_get(&ctrl_version);
 	ERR_CHK_MSG(ret, "Failed to get controller version");
@@ -227,33 +178,16 @@ int ble_core_le_pwr_ctrl_disable(void)
 	return ble_hci_vsc_op_flag_set(BLE_HCI_VSC_OP_DIS_POWER_MONITOR, 1);
 }
 
-int ble_core_init(ble_core_ready_t ready_callback)
+int ble_core_init(
+	ble_core_ready_t ready_callback) /* THis is to be moved to bt_ctrl_cfg (most of it) */
 {
 	int ret;
-
-	if (ready_callback == NULL) {
-		return -EINVAL;
-	}
-	m_ready_callback = ready_callback;
 
 	/* Setup a timer for monitoring if NET core is working or not */
 	k_timer_start(&net_core_timeout_alarm_timer, K_MSEC(NET_CORE_RESPONSE_TIMEOUT_MS),
 		      K_NO_WAIT);
 
-#if !(CONFIG_BT_PRIVACY)
-	ble_core_setup_random_static_addr();
-#endif /* !(CONFIG_BT_PRIVACY) */
-
-	/* Enable Bluetooth, with callback function that
-	 * will be called when Bluetooth is ready
-	 */
-	ret = bt_enable(on_bt_ready);
 	k_timer_stop(&net_core_timeout_alarm_timer);
-
-	if (ret) {
-		LOG_ERR("Bluetooth init failed (ret %d)", ret);
-		return ret;
-	}
 
 	ret = controller_leds_mapping();
 	if (ret) {
