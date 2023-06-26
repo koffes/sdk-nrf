@@ -622,45 +622,6 @@ int le_audio_ext_adv_set(struct bt_le_ext_adv *ext_adv)
 	return -ENOTSUP;
 }
 
-int le_audio_volume_up(void)
-{
-	if (active_stream.stream == NULL || active_stream.stream->ep == NULL) {
-		return -EFAULT;
-	}
-
-	if (active_stream.stream->ep->status.state != BT_BAP_EP_STATE_STREAMING) {
-		return -ECANCELED;
-	}
-
-	return hw_codec_volume_increase();
-}
-
-int le_audio_volume_down(void)
-{
-	if (active_stream.stream == NULL || active_stream.stream->ep == NULL) {
-		return -EFAULT;
-	}
-
-	if (active_stream.stream->ep->status.state != BT_BAP_EP_STATE_STREAMING) {
-		return -ECANCELED;
-	}
-
-	return hw_codec_volume_decrease();
-}
-
-int le_audio_volume_mute(void)
-{
-	if (active_stream.stream == NULL || active_stream.stream->ep == NULL) {
-		return -EFAULT;
-	}
-
-	if (active_stream.stream->ep->status.state != BT_BAP_EP_STATE_STREAMING) {
-		return -ECANCELED;
-	}
-
-	return hw_codec_volume_mute();
-}
-
 int le_audio_play_pause(void)
 {
 	int ret;

@@ -26,6 +26,7 @@
 #include "board.h"
 #include "le_audio.h"
 #include "bt_mgmt.h"
+#include "bt_rend.h"
 #include "audio_datapath.h"
 
 #include <zephyr/logging/log.h>
@@ -270,7 +271,7 @@ static void button_msg_sub_thread(void)
 
 		struct button_msg msg;
 
-		ret = zbus_chan_read(chan, &msg, K_MSEC(100));
+		ret = zbus_chan_read(chan, &msg, ZBUS_READ_TIMEOUT_MS);
 		ERR_CHK(ret);
 
 		LOG_DBG("Got btn evt from queue - id = %d, action = %d", msg.button_pin,
@@ -296,7 +297,7 @@ static void button_msg_sub_thread(void)
 			break;
 
 		case BUTTON_VOLUME_UP:
-			ret = le_audio_volume_up();
+			ret = bt_rend_volume_up();
 			if (ret) {
 				LOG_WRN("Failed to increase volume");
 			}
@@ -304,7 +305,7 @@ static void button_msg_sub_thread(void)
 			break;
 
 		case BUTTON_VOLUME_DOWN:
-			ret = le_audio_volume_down();
+			ret = bt_rend_volume_down();
 			if (ret) {
 				LOG_WRN("Failed to decrease volume");
 			}
@@ -312,17 +313,21 @@ static void button_msg_sub_thread(void)
 			break;
 
 		case BUTTON_4:
-#if (CONFIG_AUDIO_TEST_TONE)
-			if (IS_ENABLED(CONFIG_WALKIE_TALKIE_DEMO)) {
-				LOG_DBG("Test tone is disabled in walkie-talkie mode");
+			if (IS_ENABLED(CONFIG_AUDIO_TEST_TONE)) {
+				if (IS_ENABLED(CONFIG_WALKIE_TALKIE_DEMO)) {
+					LOG_DBG("Test tone is disabled in walkie-talkie mode");
+					break;
+				}
+
+				ret = test_tone_button_press();
+				if (ret) {
+					LOG_WRN("Failed to play test tone, ret: %d", ret);
+				}
+
 				break;
 			}
 
-			ret = test_tone_button_press();
-#else
 			ret = le_audio_user_defined_button_press(LE_AUDIO_USER_DEFINED_ACTION_1);
-#endif /*CONFIG_AUDIO_TEST_TONE*/
-
 			if (ret) {
 				LOG_WRN("Failed button 4 press, ret: %d", ret);
 			}
@@ -330,17 +335,19 @@ static void button_msg_sub_thread(void)
 			break;
 
 		case BUTTON_5:
-#if (CONFIG_AUDIO_MUTE)
-			ret = le_audio_volume_mute();
-			if (ret) {
-				LOG_WRN("Failed to mute volume");
+			if (IS_ENABLED(CONFIG_AUDIO_MUTE)) {
+				ret = bt_rend_mute(false);
+				if (ret) {
+					LOG_WRN("Failed to mute volume");
+				}
+				break;
 			}
-#else
+
 			ret = le_audio_user_defined_button_press(LE_AUDIO_USER_DEFINED_ACTION_2);
 			if (ret) {
 				LOG_WRN("User defined button 5 action failed, ret: %d", ret);
 			}
-#endif /* (CONFIG_AUDIO_MUTE) */
+
 			break;
 
 		default:
@@ -366,7 +373,7 @@ static void le_audio_msg_sub_thread(void)
 
 		struct le_audio_msg msg;
 
-		ret = zbus_chan_read(chan, &msg, K_MSEC(100));
+		ret = zbus_chan_read(chan, &msg, ZBUS_READ_TIMEOUT_MS);
 		ERR_CHK(ret);
 
 		uint8_t event = msg.event;
@@ -475,6 +482,7 @@ static void bt_mgmt_evt_handler(const struct zbus_channel *chan)
 		LOG_INF("Security changed");
 
 		le_audio_conn_set(msg->conn);
+		bt_rend_discover(msg->conn);
 		break;
 
 	default:
@@ -520,6 +528,9 @@ int streamctrl_start(void)
 	ERR_CHK_MSG(ret, "Failed to enable LE Audio");
 
 	ret = bt_mgmt_init();
+	ERR_CHK(ret);
+
+	ret = bt_rend_init();
 	ERR_CHK(ret);
 
 	if ((CONFIG_AUDIO_DEV == HEADSET) && IS_ENABLED(CONFIG_TRANSPORT_CIS)) {

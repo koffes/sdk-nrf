@@ -44,10 +44,12 @@ static struct board_version board_rev;
 ZBUS_CHAN_DECLARE(button_chan);
 ZBUS_CHAN_DECLARE(le_audio_chan);
 ZBUS_CHAN_DECLARE(bt_mgmt_chan);
+ZBUS_CHAN_DECLARE(volume_chan);
 
 ZBUS_OBS_DECLARE(button_sub);
 ZBUS_OBS_DECLARE(le_audio_evt_sub);
 ZBUS_OBS_DECLARE(bt_mgmt_evt_sub);
+ZBUS_OBS_DECLARE(volume_evt_sub);
 
 static int hfclock_config_and_start(void)
 {
@@ -186,6 +188,9 @@ int main(void)
 		ERR_CHK(ret);
 
 		ret = zbus_chan_add_obs(&bt_mgmt_chan, &bt_mgmt_evt_sub, K_MSEC(200));
+		ERR_CHK(ret);
+
+		ret = zbus_chan_add_obs(&volume_chan, &volume_evt_sub, K_MSEC(200));
 		ERR_CHK(ret);
 	}
 

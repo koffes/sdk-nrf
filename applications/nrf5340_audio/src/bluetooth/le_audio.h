@@ -212,33 +212,6 @@ int le_audio_ext_adv_set(struct bt_le_ext_adv *ext_adv);
 void le_audio_adv_get(const struct bt_data **adv, size_t *adv_size, bool periodic);
 
 /**
- * @brief	Increase volume by one step
- *
- * @return	0 for success,
- *		-ENXIO if the feature is disabled,
- *		error otherwise
- */
-int le_audio_volume_up(void);
-
-/**
- * @brief	Decrease volume by one step
- *
- * @return	0 for success,
- *		-ENXIO if the feature is disabled,
- *		error otherwise
- */
-int le_audio_volume_down(void);
-
-/**
- * @brief	Mute volume
- *
- * @return	0 for success,
- *		-ENXIO if the feature is disabled,
- *		error otherwise
- */
-int le_audio_volume_mute(void);
-
-/**
  * @brief	Either resume or pause the Bluetooth LE Audio stream,
  *		depending on the current state of the stream
  *

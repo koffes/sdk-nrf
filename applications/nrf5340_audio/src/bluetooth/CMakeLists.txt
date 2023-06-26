@@ -9,9 +9,11 @@ target_sources(app PRIVATE
 )
 
 add_subdirectory(bt_management)
+add_subdirectory(bt_renderer)
 
 zephyr_library_include_directories(
     bt_management
+    bt_renderer
 )
 
 if (CONFIG_TRANSPORT_CIS)

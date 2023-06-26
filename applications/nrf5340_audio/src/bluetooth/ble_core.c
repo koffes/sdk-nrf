@@ -25,7 +25,7 @@ LOG_MODULE_REGISTER(ble, CONFIG_BLE_LOG_LEVEL);
 #define NET_CORE_WATCHDOG_TIME_MS 1000
 
 static ble_core_ready_t m_ready_callback;
-static struct bt_le_oob _oob = { .addr = 0 };
+static struct bt_le_oob _oob = {.addr = 0};
 
 static void net_core_timeout_handler(struct k_timer *timer_id);
 static void net_core_watchdog_handler(struct k_timer *timer_id);
@@ -131,8 +131,7 @@ static void on_bt_ready(int err)
 		.antsel = ant_pin,
 		.pdn = pdn_pin,
 		/* Set CS pin to ffff since we are not using the SPI */
-		.csn = 0xffff
-	};
+		.csn = 0xffff};
 
 	ret = ble_hci_vsc_nrf21540_pins_set(&nrf21540_pins);
 	ERR_CHK(ret);

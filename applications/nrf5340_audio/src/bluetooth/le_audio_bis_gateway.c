@@ -330,24 +330,6 @@ int le_audio_config_get(uint32_t *bitrate, uint32_t *sampling_rate, uint32_t *pr
 	return -ENOTSUP;
 }
 
-int le_audio_volume_up(void)
-{
-	LOG_WRN("Not possible to increase volume on/from broadcast source");
-	return -ENXIO;
-}
-
-int le_audio_volume_down(void)
-{
-	LOG_WRN("Not possible to decrease volume on/from broadcast source");
-	return -ENXIO;
-}
-
-int le_audio_volume_mute(void)
-{
-	LOG_WRN("Not possible to mute volume on/from broadcast source");
-	return -ENXIO;
-}
-
 int le_audio_play_pause(void)
 {
 	int ret;

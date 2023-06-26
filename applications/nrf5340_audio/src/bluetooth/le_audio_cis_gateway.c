@@ -819,13 +819,6 @@ static void discover_sink_cb(struct bt_conn *conn, struct bt_codec *codec, struc
 
 	(void)memset(params, 0, sizeof(*params));
 
-#if (CONFIG_BT_VCP_VOL_CTLR)
-	ret = ble_vcs_discover(conn, channel_index);
-	if (ret) {
-		LOG_ERR("Could not do VCS discover");
-	}
-#endif /* (CONFIG_BT_VCP_VOL_CTLR ) */
-
 	if (valid_codec_cap_check(headsets[channel_index].sink_codec_cap,
 				  ARRAY_SIZE(headsets[channel_index].sink_codec_cap))) {
 		if (conn == headsets[AUDIO_CH_L].headset_conn) {
@@ -1228,14 +1221,6 @@ static int initialize(le_audio_receive_cb recv_cb, le_audio_timestamp_cb timestm
 		return ret;
 	}
 
-#if (CONFIG_BT_VCP_VOL_CTLR)
-	ret = ble_vcs_client_init();
-	if (ret) {
-		LOG_ERR("VCS client init failed");
-		return ret;
-	}
-#endif /* (CONFIG_BT_VCP_VOL_CTLR) */
-
 #if (CONFIG_BT_MCS)
 	ret = ble_mcs_server_init(le_audio_play_pause_cb);
 	if (ret) {
@@ -1292,45 +1277,6 @@ int le_audio_ext_adv_set(struct bt_le_ext_adv *ext_adv)
 void le_audio_adv_get(const struct bt_data **adv, size_t *adv_size, bool periodic)
 {
 	LOG_WRN("No advertiser in CIS gateway");
-}
-
-int le_audio_volume_up(void)
-{
-	int ret;
-
-	ret = ble_vcs_volume_up();
-	if (ret) {
-		LOG_WRN("Failed to increase volume");
-		return ret;
-	}
-
-	return 0;
-}
-
-int le_audio_volume_down(void)
-{
-	int ret;
-
-	ret = ble_vcs_volume_down();
-	if (ret) {
-		LOG_WRN("Failed to decrease volume");
-		return ret;
-	}
-
-	return 0;
-}
-
-int le_audio_volume_mute(void)
-{
-	int ret;
-
-	ret = ble_vcs_volume_mute();
-	if (ret) {
-		LOG_WRN("Failed to mute volume");
-		return ret;
-	}
-
-	return 0;
 }
 
 int le_audio_play_pause(void)

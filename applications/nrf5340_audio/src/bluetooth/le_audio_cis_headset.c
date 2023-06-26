@@ -431,14 +431,6 @@ static int initialize(le_audio_receive_cb recv_cb, le_audio_timestamp_cb timestm
 
 	bt_bap_unicast_server_register_cb(&unicast_server_cb);
 
-#if (CONFIG_BT_VCP_VOL_REND)
-	ret = ble_vcs_server_init();
-	if (ret) {
-		LOG_ERR("VCS server init failed");
-		return ret;
-	}
-#endif /* (CONFIG_BT_VCP_VOL_REND) */
-
 	if (IS_ENABLED(CONFIG_BT_MCC)) {
 		ret = ble_mcs_client_init();
 		if (ret) {
@@ -637,45 +629,6 @@ int le_audio_ext_adv_set(struct bt_le_ext_adv *ext_adv)
 {
 	LOG_DBG("No need for ext_adv in CIS headset");
 	return -ENOTSUP;
-}
-
-int le_audio_volume_up(void)
-{
-	int ret;
-
-	ret = ble_vcs_volume_up();
-	if (ret) {
-		LOG_WRN("Failed to increase volume");
-		return ret;
-	}
-
-	return 0;
-}
-
-int le_audio_volume_down(void)
-{
-	int ret;
-
-	ret = ble_vcs_volume_down();
-	if (ret) {
-		LOG_WRN("Failed to decrease volume");
-		return ret;
-	}
-
-	return 0;
-}
-
-int le_audio_volume_mute(void)
-{
-	int ret;
-
-	ret = ble_vcs_volume_mute();
-	if (ret) {
-		LOG_WRN("Failed to mute volume");
-		return ret;
-	}
-
-	return 0;
 }
 
 int le_audio_play_pause(void)
