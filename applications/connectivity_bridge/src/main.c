@@ -22,8 +22,8 @@ static uint8_t usb_serial_str[] = "THINGY91_12PLACEHLDRS";
 uint8_t *usb_update_sn_string_descriptor(void)
 {
 	snprintk(usb_serial_str, sizeof(usb_serial_str), USB_SERIALNUMBER_TEMPLATE,
-		 (uint32_t)(NRF_FICR->DEVICEADDR[1] & 0x0000FFFF) | 0x0000C000,
-		 (uint32_t)NRF_FICR->DEVICEADDR[0]);
+				(uint32_t)(NRF_FICR->DEVICEADDR[1] & 0x0000FFFF)|0x0000C000,
+				(uint32_t)NRF_FICR->DEVICEADDR[0]);
 
 	return usb_serial_str;
 }

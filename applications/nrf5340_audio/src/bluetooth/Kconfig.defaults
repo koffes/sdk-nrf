@@ -25,7 +25,7 @@ config BT_EXT_ADV
 	default y
 
 config BT_DEVICE_NAME
-	default "NRF5340_AUDIO_K"
+	default "NRF5340_AUDIO"
 
 if BT_OBSERVER
 

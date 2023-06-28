@@ -13,11 +13,10 @@
 #include <zephyr/task_wdt/task_wdt.h>
 
 #include "macros_common.h"
-/* To be renamed */
 #include "ble_hci_vsc.h"
 
 #include <zephyr/logging/log.h>
-LOG_MODULE_REGISTER(bt_ctrl_cfg, 4);
+LOG_MODULE_REGISTER(bt_ctrl_cfg, 3);
 
 #define WDT_TIMEOUT_MS	      1200
 #define CTRL_POLL_INTERVAL_MS (WDT_TIMEOUT_MS - 200)
@@ -142,10 +141,10 @@ static void work_ctlr_poll(struct k_work *work)
 	uint16_t ctrl_version = 0;
 
 	ret = bt_ctrl_version_get(&ctrl_version);
-	ERR_CHK_MSG(ret, "Failed to get controller version");
+	ERR_CHK_MSG(ret, "Failed to contact net core");
 
 	if (!ctrl_version) {
-		ERR_CHK_MSG(-EIO, "Failed to contact net core");
+		ERR_CHK_MSG(-EIO, "Controller version is not set");
 	}
 
 	ret = task_wdt_feed(wdt_ch_id);

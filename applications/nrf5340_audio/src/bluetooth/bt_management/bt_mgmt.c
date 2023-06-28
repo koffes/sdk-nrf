@@ -242,6 +242,7 @@ static int bonding_clear_check(void)
 
 static void mac_print(void)
 {
+	int ret;
 	/* It may be confusing to print the MAC when privacy is enabled.
 	 * This address will change. Have a look at BT_LOG_SNIFFER_INFO for debugging
 	 * and sniffer purposes
@@ -249,7 +250,9 @@ static void mac_print(void)
 
 	char dev[BT_ADDR_LE_STR_LEN];
 	/* This call will create a new RPA */
-	(void)bt_le_oob_get_local(BT_ID_DEFAULT, &_oob);
+	ret = bt_le_oob_get_local(BT_ID_DEFAULT, &_oob);
+	ERR_CHK(ret);
+
 	(void)bt_addr_le_to_str(&_oob.addr, dev, BT_ADDR_LE_STR_LEN);
 	if (IS_ENABLED(CONFIG_BT_PRIVACY)) {
 		LOG_INF("MAC: %s Valid until next RPA timeout", dev);
