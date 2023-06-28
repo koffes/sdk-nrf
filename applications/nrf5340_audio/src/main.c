@@ -184,7 +184,7 @@ int main(void)
 
 #if defined(CONFIG_AUDIO_DFU_ENABLE)
 	/* Check DFU BTN before initialize BLE */
-	dfu_entry_check((void *)ble_core_init);
+	dfu_entry_check((void *)bt_mgmt_init);
 #endif
 
 	ret = leds_set();
