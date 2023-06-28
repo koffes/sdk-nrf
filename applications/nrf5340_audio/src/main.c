@@ -18,7 +18,6 @@
 #include "button_handler.h"
 #include "button_assignments.h"
 #include "nrfx_clock.h"
-#include "ble_core.h"
 #include "sd_card.h"
 #include "board_version.h"
 #include "audio_system.h"

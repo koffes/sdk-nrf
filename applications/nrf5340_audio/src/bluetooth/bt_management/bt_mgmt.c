@@ -16,9 +16,9 @@
 #include "macros_common.h"
 #include "nrf5340_audio_common.h"
 #include "ble_audio_services.h"
-#include "ble_hci_vsc.h"
 #include "button_handler.h"
 #include "button_assignments.h"
+#include "ble_hci_vsc.h"
 
 #include <zephyr/logging/log.h>
 LOG_MODULE_REGISTER(bt_mgmt, CONFIG_BT_MGMT_LOG_LEVEL);

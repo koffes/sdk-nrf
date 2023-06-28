@@ -5,7 +5,6 @@
 #
 
 target_sources(app PRIVATE
-	       ${CMAKE_CURRENT_SOURCE_DIR}/ble_core.c
 		   ${CMAKE_CURRENT_SOURCE_DIR}/bt_ctrl_cfg.c
 )
 
