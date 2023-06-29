@@ -330,6 +330,8 @@ int bt_mgmt_init(void)
 		}
 	}
 
+	mac_print();
+
 	if (IS_ENABLED(CONFIG_BT_CONN)) {
 		bt_conn_cb_register(&conn_callbacks);
 	}
@@ -337,8 +339,6 @@ int bt_mgmt_init(void)
 	if (IS_ENABLED(CONFIG_BT_PERIPHERAL) || IS_ENABLED(CONFIG_BT_BROADCASTER)) {
 		bt_mgmt_adv_init();
 	}
-
-	mac_print();
 
 	return 0;
 }
