@@ -576,5 +576,9 @@ module = BT_VOLUME
 module-str = bt_volume
 source "subsys/logging/Kconfig.template.log_config"
 
+module = BT_CTLR_CFG
+module-str = bt-ctlr-cfg
+source "subsys/logging/Kconfig.template.log_config"
+
 endmenu # Log levels
 endmenu # Bluetooth

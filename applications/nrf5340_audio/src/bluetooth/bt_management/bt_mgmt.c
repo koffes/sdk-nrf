@@ -286,14 +286,14 @@ static int random_static_addr_cfg(void)
 			return ret;
 		}
 
-	} else {
-		LOG_WRN("Unable to read from FICR");
-		/* If no address can be created based on FICR,
-		 * then a random address is created
-		 */
-		return -ENXIO;
+		return 0;
 	}
-	return 0;
+
+	LOG_WRN("Unable to read from FICR");
+	/* If no address can be created based on FICR,
+	 * then a random address is created
+	 */
+	return -ENXIO;
 }
 
 int bt_mgmt_init(void)

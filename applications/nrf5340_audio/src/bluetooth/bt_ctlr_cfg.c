@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: LicenseRef-Nordic-5-Clause
  */
 
-#include "bt_ctrl_cfg.h"
+#include "bt_ctlr_cfg.h"
 
 #include <stdbool.h>
 #include <zephyr/bluetooth/hci.h>
@@ -16,18 +16,18 @@
 #include "ble_hci_vsc.h"
 
 #include <zephyr/logging/log.h>
-LOG_MODULE_REGISTER(bt_ctrl_cfg, 3);
+LOG_MODULE_REGISTER(bt_ctlr_cfg, CONFIG_BT_CTLR_CFG_LOG_LEVEL);
 
 #define WDT_TIMEOUT_MS	      1200
-#define CTRL_POLL_INTERVAL_MS (WDT_TIMEOUT_MS - 200)
+#define CTLR_POLL_INTERVAL_MS (WDT_TIMEOUT_MS - 200)
 
-static struct k_work work_ctrl_version_poll;
+static struct k_work work_ctlr_version_poll;
 static void ctlr_version_poll_timer_handler(struct k_timer *timer_id);
 static int wdt_ch_id;
 
 K_TIMER_DEFINE(ctlr_poll_timer, ctlr_version_poll_timer_handler, NULL);
 
-static int ctrl_acs_nrf53_cfg(void)
+static int bt_ll_acs_nrf53_cfg(void)
 {
 	int ret;
 	/* Enable notification of lost ISO packets */
@@ -116,7 +116,33 @@ static int ctrl_acs_nrf53_cfg(void)
 	return 0;
 }
 
-int bt_ctrl_version_get(uint16_t *ctrl_version)
+static void work_ctlr_poll(struct k_work *work)
+{
+	int ret;
+	uint16_t ctlr_version = 0;
+
+	ret = bt_ctlr_version_get(&ctlr_version);
+	ERR_CHK_MSG(ret, "Failed to contact net core");
+
+	if (!ctlr_version) {
+		ERR_CHK_MSG(-EIO, "Controller version is not set");
+	}
+
+	ret = task_wdt_feed(wdt_ch_id);
+	ERR_CHK_MSG(ret, "Failed to feed watchdog");
+}
+
+static void ctlr_version_poll_timer_handler(struct k_timer *timer_id)
+{
+	k_work_submit(&work_ctlr_version_poll);
+}
+
+static void wdt_timeout_cb(int channel_id, void *user_data)
+{
+	ERR_CHK_MSG(-ETIMEDOUT, "Controller not responsive");
+}
+
+int bt_ctlr_version_get(uint16_t *ctlr_version)
 {
 	int ret;
 	struct net_buf *rsp;
@@ -128,52 +154,26 @@ int bt_ctrl_version_get(uint16_t *ctrl_version)
 
 	struct bt_hci_rp_read_local_version_info *rp = (void *)rsp->data;
 
-	*ctrl_version = sys_le16_to_cpu(rp->hci_revision);
+	*ctlr_version = sys_le16_to_cpu(rp->hci_revision);
 
 	net_buf_unref(rsp);
 
 	return 0;
 }
 
-static void work_ctlr_poll(struct k_work *work)
+int bt_ctlr_cfg_init(bool watchdog_enable)
 {
 	int ret;
-	uint16_t ctrl_version = 0;
+	uint16_t ctlr_version = 0;
 
-	ret = bt_ctrl_version_get(&ctrl_version);
-	ERR_CHK_MSG(ret, "Failed to contact net core");
-
-	if (!ctrl_version) {
-		ERR_CHK_MSG(-EIO, "Controller version is not set");
-	}
-
-	ret = task_wdt_feed(wdt_ch_id);
-	ERR_CHK_MSG(ret, "Failed to feed watchdog");
-}
-
-static void ctlr_version_poll_timer_handler(struct k_timer *timer_id)
-{
-	k_work_submit(&work_ctrl_version_poll);
-}
-
-static void wdt_timeout_cb(int channel_id, void *user_data)
-{
-	ERR_CHK_MSG(-ETIMEDOUT, "Controller not responsive");
-}
-
-int bt_ctrl_cfg(bool watchdog_enable)
-{
-	int ret;
-	uint16_t ctrl_version = 0;
-
-	ret = bt_ctrl_version_get(&ctrl_version);
+	ret = bt_ctlr_version_get(&ctlr_version);
 	if (ret) {
 		return ret;
 	}
 
 	if (IS_ENABLED(CONFIG_BT_LL_ACS_NRF53)) {
-		LOG_INF("Controller: LL_ACS_NRF53. Version: %d", ctrl_version);
-		ret = ctrl_acs_nrf53_cfg();
+		LOG_INF("Controller: LL_ACS_NRF53. Version: %d", ctlr_version);
+		ret = bt_ll_acs_nrf53_cfg();
 		if (ret) {
 			return ret;
 		}
@@ -194,9 +194,9 @@ int bt_ctrl_cfg(bool watchdog_enable)
 			return wdt_ch_id;
 		}
 
-		k_work_init(&work_ctrl_version_poll, work_ctlr_poll);
-		k_timer_start(&ctlr_poll_timer, K_MSEC(CTRL_POLL_INTERVAL_MS),
-			      K_MSEC(CTRL_POLL_INTERVAL_MS));
+		k_work_init(&work_ctlr_version_poll, work_ctlr_poll);
+		k_timer_start(&ctlr_poll_timer, K_MSEC(CTLR_POLL_INTERVAL_MS),
+			      K_MSEC(CTLR_POLL_INTERVAL_MS));
 	}
 
 	return 0;

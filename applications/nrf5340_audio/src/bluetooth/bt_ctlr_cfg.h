@@ -17,16 +17,16 @@
  *
  * @return	0 if success, error otherwise
  */
-int bt_ctrl_version_get(uint16_t *ctrl_version);
+int bt_ctlr_version_get(uint16_t *ctrl_version);
 
 /**
  * @brief	Configure the Bluetooth controller.
  *
  * @param[in]	watchdog_enable	If true, will at given intervals poll the controller
- * to ensure it is still alive.
+ *              to ensure it is still alive.
  *
  * @return	0 if success, error otherwise
  */
-int bt_ctrl_cfg(bool watchdog_enable);
+int bt_ctlr_cfg_init(bool watchdog_enable);
 
 #endif
