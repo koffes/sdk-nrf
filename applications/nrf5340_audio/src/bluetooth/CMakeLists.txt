@@ -4,14 +4,12 @@
 # SPDX-License-Identifier: LicenseRef-Nordic-5-Clause
 #
 
-target_sources(app PRIVATE
-		   ${CMAKE_CURRENT_SOURCE_DIR}/bt_ctlr_cfg.c
-)
-
+add_subdirectory(bt_ctlr)
 add_subdirectory(bt_management)
 add_subdirectory(bt_renderer)
 
 zephyr_library_include_directories(
+    bt_ctlr
     bt_management
     bt_renderer
 )

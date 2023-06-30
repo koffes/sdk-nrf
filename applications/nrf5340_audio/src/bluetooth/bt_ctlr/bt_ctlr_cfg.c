@@ -29,6 +29,7 @@ K_TIMER_DEFINE(ctlr_poll_timer, ctlr_version_poll_timer_handler, NULL);
 
 static int bt_ll_acs_nrf53_cfg(void)
 {
+#if (CONFIG_BT_LL_ACS_NRF53)
 	int ret;
 	/* Enable notification of lost ISO packets */
 	ret = ble_hci_vsc_op_flag_set(BLE_HCI_VSC_OP_ISO_LOST_NOTIFY, 1);
@@ -99,6 +100,7 @@ static int bt_ll_acs_nrf53_cfg(void)
 #endif /*CONFIG_NRF_21540_ACTIVE*/
 
 	/* Map controller LEDs*/
+
 	ret = ble_hci_vsc_led_pin_map(PAL_LED_ID_CPU_ACTIVE,
 				      DT_GPIO_FLAGS_BY_IDX(DT_NODELABEL(rgb2_green), gpios, 0),
 				      DT_GPIO_PIN_BY_IDX(DT_NODELABEL(rgb2_green), gpios, 0));
@@ -114,6 +116,9 @@ static int bt_ll_acs_nrf53_cfg(void)
 	}
 
 	return 0;
+#else
+	return -ENODEV;
+#endif /* CONFIG_BT_LL_ACS_NRF53*/
 }
 
 static void work_ctlr_poll(struct k_work *work)

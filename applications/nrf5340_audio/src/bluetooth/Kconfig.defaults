@@ -7,25 +7,14 @@
 config BT_AUDIO
 	default y
 
-# Not supported on LE Audio Controller Subsystem for nRF53
-config BT_ATT_ENFORCE_FLOW
-	default n
-
-# Disable Zephyr HCI Vendor-Specific extensions
-config BT_HCI_VS_EXT
-	default n
-
-config BT_HCI_VS
-	default y if BT
+config BT_DEVICE_NAME
+	default "NRF5340_AUDIO"
 
 config BT_ECC
 	default y if BT
 
 config BT_EXT_ADV
 	default y
-
-config BT_DEVICE_NAME
-	default "NRF5340_AUDIO"
 
 if BT_OBSERVER
 
