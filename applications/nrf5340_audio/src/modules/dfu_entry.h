@@ -15,8 +15,7 @@ typedef int (*ble_init_func)(void *ready_callback);
 /**
  * @brief Check button pressed status to advertise SMP_SVR service only
  *
- * @param[in]	ble_init Pointer to function that initializes the BLE subsystem
  */
-void dfu_entry_check(ble_init_func ble_init);
+void dfu_entry_check(void);
 
 #endif /* _DFU_ENTRY_H_ */

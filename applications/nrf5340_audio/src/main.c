@@ -19,14 +19,11 @@
 #include "button_assignments.h"
 #include "nrfx_clock.h"
 #include "sd_card.h"
+#include "bt_mgmt.h"
 #include "board_version.h"
 #include "audio_system.h"
 #include "channel_assignment.h"
 #include "streamctrl.h"
-
-#if defined(CONFIG_AUDIO_DFU_ENABLE)
-#include "dfu_entry.h"
-#endif
 
 #include <zephyr/logging/log.h>
 LOG_MODULE_REGISTER(main, CONFIG_MAIN_LOG_LEVEL);
@@ -181,10 +178,8 @@ int main(void)
 		}
 	}
 
-#if defined(CONFIG_AUDIO_DFU_ENABLE)
-	/* Check DFU BTN before initialize BLE */
-	dfu_entry_check((void *)bt_mgmt_init);
-#endif
+	ret = bt_mgmt_init();
+	ERR_CHK(ret);
 
 	ret = leds_set();
 	ERR_CHK(ret);

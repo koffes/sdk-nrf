@@ -87,7 +87,7 @@ static void dfu_set_bt_name(void)
 	bt_set_name(name);
 }
 
-void dfu_entry_check(ble_init_func ble_init)
+void dfu_entry_check(void)
 {
 	int ret;
 	bool pressed;
@@ -99,8 +99,6 @@ void dfu_entry_check(ble_init_func ble_init)
 
 	if (pressed) {
 		LOG_INF("Enter SMP_SVR service only status");
-		ret = ble_init(false);
-		ERR_CHK(ret);
 
 		bt_conn_cb_register(&dfu_conn_callbacks);
 		adv_param = *BT_LE_ADV_CONN_NAME;

@@ -19,6 +19,11 @@
 #include "button_handler.h"
 #include "button_assignments.h"
 #include "ble_hci_vsc.h"
+#include "bt_ctlr_cfg.h"
+
+#if defined(CONFIG_AUDIO_DFU_ENABLE)
+#include "dfu_entry.h"
+#endif
 
 #include <zephyr/logging/log.h>
 LOG_MODULE_REGISTER(bt_mgmt, CONFIG_BT_MGMT_LOG_LEVEL);
@@ -329,6 +334,16 @@ int bt_mgmt_init(void)
 			return ret;
 		}
 	}
+
+	ret = bt_ctlr_cfg_init(true);
+	if (ret) {
+		return ret;
+	}
+
+#if defined(CONFIG_AUDIO_DFU_ENABLE)
+	/* Check DFU BTN and enter DFU mode */
+	dfu_entry_check();
+#endif
 
 	mac_print();
 
