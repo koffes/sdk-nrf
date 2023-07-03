@@ -87,26 +87,16 @@ static void dfu_set_bt_name(void)
 	bt_set_name(name);
 }
 
-void dfu_entry_check(void)
+void dfu_entry(void)
 {
-	int ret;
-	bool pressed;
+	LOG_INF("Enter SMP_SVR service only status");
 
-	ret = button_pressed(BUTTON_4, &pressed);
-	if (ret) {
-		return;
-	}
+	bt_conn_cb_register(&dfu_conn_callbacks);
+	adv_param = *BT_LE_ADV_CONN_NAME;
+	dfu_set_bt_name();
+	smp_adv();
 
-	if (pressed) {
-		LOG_INF("Enter SMP_SVR service only status");
-
-		bt_conn_cb_register(&dfu_conn_callbacks);
-		adv_param = *BT_LE_ADV_CONN_NAME;
-		dfu_set_bt_name();
-		smp_adv();
-
-		while (1) {
-			k_sleep(K_MSEC(100));
-		}
+	while (1) {
+		k_sleep(K_MSEC(100));
 	}
 }

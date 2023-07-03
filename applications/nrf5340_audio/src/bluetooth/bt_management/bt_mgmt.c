@@ -335,15 +335,27 @@ int bt_mgmt_init(void)
 		}
 	}
 
-	ret = bt_ctlr_cfg_init(true);
+#if defined(CONFIG_AUDIO_DFU_ENABLE)
+	bool pressed;
+
+	ret = button_pressed(BUTTON_4, &pressed);
 	if (ret) {
 		return ret;
 	}
 
-#if defined(CONFIG_AUDIO_DFU_ENABLE)
-	/* Check DFU BTN and enter DFU mode */
-	dfu_entry_check();
+	if (pressed) {
+		ret = bt_ctlr_cfg_init(false);
+		if (ret) {
+			return ret;
+		}
+		dfu_entry();
+	}
+
 #endif
+	ret = bt_ctlr_cfg_init(true);
+	if (ret) {
+		return ret;
+	}
 
 	mac_print();
 
