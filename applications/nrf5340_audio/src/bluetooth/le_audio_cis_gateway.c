@@ -19,7 +19,7 @@
 
 #include "macros_common.h"
 #include "nrf5340_audio_common.h"
-#include "ble_audio_services.h"
+#include "bt_cont_ctrl.h"
 #include "channel_assignment.h"
 
 #include <zephyr/logging/log.h>
@@ -1013,7 +1013,6 @@ static int discover_source(struct bt_conn *conn)
 }
 #endif /* (CONFIG_BT_AUDIO_RX) */
 
-#if (CONFIG_BT_MCS)
 /**
  * @brief	Callback handler for play/pause.
  *
@@ -1022,7 +1021,7 @@ static int discover_source(struct bt_conn *conn)
  *
  * @param[in]	play  Boolean to indicate if the stream should be resumed or paused.
  */
-static void le_audio_play_pause_cb(bool play)
+static void le_audio_play_pause_cb(bool play) /*TODO: Needs to read zbus message */
 {
 	int ret;
 
@@ -1074,7 +1073,6 @@ static void le_audio_play_pause_cb(bool play)
 
 	playing_state = play;
 }
-#endif /* CONFIG_BT_MCS */
 
 static int iso_stream_send(uint8_t const *const data, size_t size, struct le_audio_headset headset)
 {
@@ -1221,13 +1219,11 @@ static int initialize(le_audio_receive_cb recv_cb, le_audio_timestamp_cb timestm
 		return ret;
 	}
 
-#if (CONFIG_BT_MCS)
-	ret = ble_mcs_server_init(le_audio_play_pause_cb);
+	ret = bt_cont_ctrl_init();
 	if (ret) {
-		LOG_ERR("MCS server init failed");
+		LOG_ERR("bt content control init failed");
 		return ret;
 	}
-#endif /* CONFIG_BT_MCS */
 
 	initialized = true;
 
@@ -1286,7 +1282,7 @@ int le_audio_play_pause(void)
 	if (IS_ENABLED(CONFIG_STREAM_BIDIRECTIONAL)) {
 		LOG_WRN("Play/pause not supported for bidirectional mode");
 	} else {
-		ret = ble_mcs_play_pause(NULL);
+		ret = bt_cont_ctrl_play_pause(NULL);
 		if (ret) {
 			LOG_WRN("Failed to change streaming state");
 			return ret;

@@ -19,7 +19,7 @@
 
 #include "macros_common.h"
 #include "nrf5340_audio_common.h"
-#include "ble_audio_services.h"
+#include "bt_cont_ctrl.h"
 #include "channel_assignment.h"
 
 #include <zephyr/logging/log.h>
@@ -233,14 +233,12 @@ static int lc3_config_cb(struct bt_conn *conn, const struct bt_bap_ep *ep, enum 
 			*stream = audio_stream;
 			*pref = qos_pref;
 
-			/* MCS discover needs to be done once per connection */
-			if (IS_ENABLED(CONFIG_BT_MCC)) {
-				ret = ble_mcs_discover(conn);
-				if (ret == -EALREADY) {
-					LOG_DBG("Discovery already run or in progress");
-				} else if (ret) {
-					LOG_ERR("Failed to start discovery of MCS: %d", ret);
-				}
+			ret = bt_cont_ctrl_discover(conn);
+
+			if (ret == -EALREADY) {
+				LOG_DBG("Discovery already run or in progress");
+			} else if (ret) {
+				LOG_ERR("Failed to start discovery of content control: %d", ret);
 			}
 
 			return 0;
@@ -431,13 +429,13 @@ static int initialize(le_audio_receive_cb recv_cb, le_audio_timestamp_cb timestm
 
 	bt_bap_unicast_server_register_cb(&unicast_server_cb);
 
-	if (IS_ENABLED(CONFIG_BT_MCC)) {
-		ret = ble_mcs_client_init();
-		if (ret) {
-			LOG_ERR("MCS client init failed");
-			return ret;
-		}
+	ret = bt_cont_ctrl_init();
+	if (ret) {
+		LOG_ERR("bt_cont_ctrl_init failed");
+		return ret;
 	}
+
+	return 0;
 
 	channel_assignment_get(&channel);
 
@@ -638,7 +636,7 @@ int le_audio_play_pause(void)
 	if (IS_ENABLED(CONFIG_STREAM_BIDIRECTIONAL)) {
 		LOG_WRN("Play/pause not supported for bidirectional mode");
 	} else {
-		ret = ble_mcs_play_pause(default_conn);
+		ret = bt_cont_ctrl_play_pause(default_conn);
 		if (ret) {
 			LOG_WRN("Failed to change streaming state");
 			return ret;

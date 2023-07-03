@@ -68,4 +68,14 @@ struct volume_msg {
 	uint8_t volume;
 };
 
+enum media_control_play_pause_evt_type {
+	MEDIA_INVALID,
+	MEDIA_PLAY,
+	MEDIA_PAUSE,
+};
+
+struct media_control_play_pause_msg {
+	enum media_control_play_pause_evt_type event;
+};
+
 #endif /* _NRF5340_AUDIO_COMMON_H_ */

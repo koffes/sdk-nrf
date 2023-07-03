@@ -15,7 +15,7 @@
 
 #include "macros_common.h"
 #include "nrf5340_audio_common.h"
-#include "ble_audio_services.h"
+#include "bt_cont_ctrl.h"
 #include "button_handler.h"
 #include "button_assignments.h"
 #include "ble_hci_vsc.h"
@@ -149,11 +149,9 @@ static void disconnected_cb(struct bt_conn *conn, uint8_t reason)
 		bt_conn_unref(conn);
 	}
 
-	if (IS_ENABLED(CONFIG_BT_MCC)) {
-		ret = ble_mcp_conn_disconnected(conn);
-		if (ret) {
-			LOG_ERR("ble_msc_conn_disconnected failed with %d", ret);
-		}
+	ret = bt_cont_ctrl_conn_disconn(conn);
+	if (ret) {
+		LOG_ERR("bt_cont_ctrl_conn_disconn failed with %d", ret);
 	}
 
 	/* Publish disconnected */
