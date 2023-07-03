@@ -4,13 +4,13 @@
  * SPDX-License-Identifier: LicenseRef-Nordic-5-Clause
  */
 
-#ifndef _BT_DFU_H_
-#define _BT_DFU_H_
+#ifndef _BT_MGMT_DFU_H_
+#define _BT_MGMT_DFU_H_
 
 /**
  * @brief Enter DFU mode. Advertise SMP_SVR service only
  *
  */
-void bt_dfu_start(void);
+void bt_mgmt_dfu_start(void);
 
-#endif /* _BT_DFU_H_ */
+#endif /* _BT_MGMT_DFU_H_ */

@@ -22,7 +22,7 @@
 #include "bt_ctlr_cfg.h"
 
 #if defined(CONFIG_AUDIO_DFU_ENABLE)
-#include "bt_dfu.h"
+#include "bt_mgmt_dfu.h"
 #endif
 
 #include <zephyr/logging/log.h>
@@ -348,7 +348,7 @@ int bt_mgmt_init(void)
 		if (ret) {
 			return ret;
 		}
-		bt_dfu_start();
+		bt_mgmt_dfu_start();
 	}
 
 #endif

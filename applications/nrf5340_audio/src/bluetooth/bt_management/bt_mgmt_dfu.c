@@ -6,7 +6,7 @@
 
 /* Override compiler definition to use size-bounded string copying and concatenation function */
 #define _BSD_SOURCE
-#include "bt_dfu.h"
+#include "bt_mgmt_dfu.h"
 
 #include <zephyr/kernel.h>
 #include <zephyr/bluetooth/bluetooth.h>
@@ -20,7 +20,7 @@
 #include "channel_assignment.h"
 
 #include <zephyr/logging/log.h>
-LOG_MODULE_REGISTER(bt_dfu, CONFIG_BT_MGMT_LOG_LEVEL);
+LOG_MODULE_REGISTER(bt_mgmt_dfu, CONFIG_BT_MGMT_LOG_LEVEL);
 
 /* These defined name only used by DFU */
 #define DEVICE_NAME_DFU	    CONFIG_BT_DFU_DEVICE_NAME
@@ -87,7 +87,7 @@ static void dfu_set_bt_name(void)
 	bt_set_name(name);
 }
 
-void bt_dfu_start(void)
+void bt_mgmt_dfu_start(void)
 {
 	LOG_INF("Enter SMP_SVR service only status");
 
