@@ -527,9 +527,6 @@ int streamctrl_start(void)
 			      nonvalid_iso_cfgs);
 	ERR_CHK_MSG(ret, "Failed to enable LE Audio");
 
-	ret = bt_mgmt_init();
-	ERR_CHK(ret);
-
 	ret = bt_rend_init();
 	ERR_CHK(ret);
 

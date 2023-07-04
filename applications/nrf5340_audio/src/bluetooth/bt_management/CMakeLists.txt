@@ -17,3 +17,9 @@ if (CONFIG_BT_PERIPHERAL OR CONFIG_BT_BROADCASTER)
 	target_sources(app PRIVATE
 	       ${CMAKE_CURRENT_SOURCE_DIR}/bt_mgmt_adv.c)
 endif()
+
+if (CONFIG_AUDIO_DFU_ENABLE)
+	target_sources(app PRIVATE
+			    ${CMAKE_CURRENT_SOURCE_DIR}/bt_mgmt_dfu.c
+	)
+endif()

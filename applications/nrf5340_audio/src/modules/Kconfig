@@ -64,10 +64,6 @@ module = MODULE_BUTTON_HANDLER
 module-str = module-button-handler
 source "subsys/logging/Kconfig.template.log_config"
 
-module = MODULE_DFU_ENTRY
-module-str = module-dfu-entry
-source "subsys/logging/Kconfig.template.log_config"
-
 module = MODULE_HW_CODEC
 module-str = module-hw-codec
 source "subsys/logging/Kconfig.template.log_config"
