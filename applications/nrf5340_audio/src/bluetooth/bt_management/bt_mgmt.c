@@ -348,6 +348,7 @@ int bt_mgmt_init(void)
 		if (ret) {
 			return ret;
 		}
+		/* This call will not return */
 		bt_mgmt_dfu_start();
 	}
 

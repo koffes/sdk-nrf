@@ -28,7 +28,6 @@
 #include "bt_mgmt.h"
 #include "bt_rend.h"
 #include "audio_datapath.h"
-#include "bt_ctlr_cfg.h"
 
 #include <zephyr/logging/log.h>
 LOG_MODULE_REGISTER(streamctrl, CONFIG_STREAMCTRL_LOG_LEVEL);
