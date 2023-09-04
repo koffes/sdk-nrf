@@ -8,6 +8,7 @@
 
 #include <zephyr/zbus/zbus.h>
 #include <zephyr/bluetooth/bluetooth.h>
+#include <zephyr/sys/byteorder.h>
 #include <zephyr/bluetooth/conn.h>
 #include <zephyr/bluetooth/audio/audio.h>
 #include <zephyr/bluetooth/audio/bap.h>
@@ -380,14 +381,6 @@ static void pac_record_cb(struct bt_conn *conn, enum bt_audio_dir dir,
 			&temp_cap[temp_cap_index].codec[temp_cap[temp_cap_index].num_caps];
 
 		memcpy(codec_loc, codec, sizeof(struct bt_audio_codec_cap));
-
-		for (int i = 0; i < codec->data_len; i++) {
-			codec_loc->data[i].data.data = codec_loc->data[i].value;
-		}
-
-		for (int i = 0; i < codec->meta_len; i++) {
-			codec_loc->meta[i].data.data = codec_loc->meta[i].value;
-		}
 
 		temp_cap[temp_cap_index].num_caps++;
 	} else {
@@ -793,26 +786,40 @@ static void work_stream_start(struct k_work *work)
 	}
 }
 
-/**
- * @brief Set the allocation to a preset codec configuration.
- *
- * @param codec The preset codec configuration.
- * @param loc   Location bitmask setting.
- *
- */
-static void bt_audio_codec_allocation_set(struct bt_audio_codec_cfg *codec,
-					  enum bt_audio_location loc)
+static int bt_audio_codec_allocation_set(struct bt_audio_codec_cfg *codec_cfg,
+					 enum bt_audio_location loc)
 {
-	for (size_t i = 0; i < codec->data_len; i++) {
-		if (codec->data[i].data.type == BT_AUDIO_CODEC_CONFIG_LC3_CHAN_ALLOC) {
-			codec->data[i].value[0] = loc & 0xff;
-			codec->data[i].value[1] = (loc >> 8) & 0xFFU;
-			codec->data[i].value[2] = (loc >> 16) & 0xFFU;
-			codec->data[i].value[3] = (loc >> 24) & 0xFFU;
-			codec->data[i].data.data = codec->data[i].value;
-			return;
+	for (size_t i = 0U; i < codec_cfg->data_len;) {
+		const uint8_t len = codec_cfg->data[i++];
+		const uint8_t type = codec_cfg->data[i++];
+		uint8_t *value = &codec_cfg->data[i];
+		const uint8_t value_len = len - sizeof(type);
+
+		if (type == BT_AUDIO_CODEC_CONFIG_LC3_CHAN_ALLOC) {
+			const uint32_t loc_32 = loc;
+
+			sys_put_le32(loc_32, value);
+
+			return 0;
 		}
+		i += value_len;
 	}
+
+	return -ENODATA;
+}
+
+static bool parse_cb(struct bt_data *data, void *user_data)
+{
+	if (data->type == BT_AUDIO_CODEC_LC3_FREQ) {
+		uint16_t temp = sys_get_le16(data->data);
+
+		if (temp & BT_AUDIO_CODEC_CAPABILIY_FREQ) {
+			*(bool *)user_data = true;
+		}
+		return false;
+	}
+
+	return true;
 }
 
 /**
@@ -821,24 +828,26 @@ static void bt_audio_codec_allocation_set(struct bt_audio_codec_cfg *codec,
  * @note   Currently only the sampling frequency is checked
  *
  * @param  cap_array  The array of pointers to codec capabilities
- * @param  size       The size of cap_array
- *
+ * @param  num_caps   Number of caps
  * @return True if valid codec capability found, false otherwise
  */
-static bool valid_codec_cap_check(struct bt_audio_codec_cap cap_array[], size_t size)
+static bool valid_codec_cap_check(struct bt_audio_codec_cap cap_array[], uint8_t num_caps)
 {
-	const struct bt_codec_data *element;
+	int ret;
+	bool valid_result = false;
 
 	/* Only the sampling frequency is checked */
-	for (int i = 0; i < size; i++) {
-		if (bt_audio_codec_cfg_get_val(&cap_array[i], BT_AUDIO_CODEC_LC3_FREQ, &element)) {
-			if (element->data.data[0] & BT_AUDIO_CODEC_CAPABILIY_FREQ) {
-				return true;
-			}
+	for (int i = 0; i < num_caps; i++) {
+
+		ret = bt_audio_data_parse(cap_array[i].data, cap_array[i].data_len, parse_cb,
+					  &valid_result);
+
+		if (ret != 0 || ret != -ECANCELED) {
+			/* TODO: Don't care */
 		}
 	}
 
-	return false;
+	return valid_result;
 }
 
 static void discover_sink_cb(struct bt_conn *conn, int err, enum bt_audio_dir dir)
