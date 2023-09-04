@@ -48,10 +48,10 @@ struct le_audio_headset {
 	uint8_t num_eps;
 	struct bt_bap_stream sink_stream;
 	struct bt_bap_ep *sink_ep;
-	struct bt_codec sink_codec_cap[CONFIG_CODEC_CAP_COUNT_MAX];
+	struct bt_audio_codec sink_codec_cap[CONFIG_CODEC_CAP_COUNT_MAX];
 	struct bt_bap_stream source_stream;
 	struct bt_bap_ep *source_ep;
-	struct bt_codec source_codec_cap[CONFIG_CODEC_CAP_COUNT_MAX];
+	struct bt_audio_codec source_codec_cap[CONFIG_CODEC_CAP_COUNT_MAX];
 	struct bt_conn *headset_conn;
 	struct net_buf_pool *iso_tx_pool;
 	atomic_t iso_tx_pool_alloc;
@@ -71,7 +71,7 @@ struct temp_cap_storage {
 	struct bt_conn *conn;
 	uint8_t num_caps;
 	/* Must be the same size as sink_codec_cap and source_codec_cap */
-	struct bt_codec codec[CONFIG_CODEC_CAP_COUNT_MAX];
+	struct bt_audio_codec codec[CONFIG_CODEC_CAP_COUNT_MAX];
 };
 
 static struct le_audio_headset headsets[CONFIG_BT_MAX_CONN];
@@ -357,7 +357,8 @@ static int temp_cap_index_get(struct bt_conn *conn, uint8_t *index)
 	return -ECANCELED;
 }
 
-static void pac_record_cb(struct bt_conn *conn, enum bt_audio_dir dir, const struct bt_codec *codec)
+static void pac_record_cb(struct bt_conn *conn, enum bt_audio_dir dir,
+			  const struct bt_audio_codec *codec)
 {
 	int ret;
 	uint8_t temp_cap_index;
@@ -368,17 +369,17 @@ static void pac_record_cb(struct bt_conn *conn, enum bt_audio_dir dir, const str
 		return;
 	}
 
-	if (codec->id != BT_CODEC_LC3_ID) {
+	if (codec->id != BT_AUDIO_CODEC_LC3_ID) {
 		LOG_DBG("Only the LC3 codec is supported");
 		return;
 	}
 
 	/* num_caps is an increasing index that starts at 0 */
 	if (temp_cap[temp_cap_index].num_caps < ARRAY_SIZE(temp_cap[temp_cap_index].codec)) {
-		struct bt_codec *codec_loc =
+		struct bt_audio_codec *codec_loc =
 			&temp_cap[temp_cap_index].codec[temp_cap[temp_cap_index].num_caps];
 
-		memcpy(codec_loc, codec, sizeof(struct bt_codec));
+		memcpy(codec_loc, codec, sizeof(struct bt_audio_codec));
 
 		for (int i = 0; i < codec->data_count; i++) {
 			codec_loc->data[i].data.data = codec_loc->data[i].value;
@@ -462,7 +463,8 @@ static void stream_sent_cb(struct bt_bap_stream *stream)
 	}
 }
 
-static void stream_configured_cb(struct bt_bap_stream *stream, const struct bt_codec_qos_pref *pref)
+static void stream_configured_cb(struct bt_bap_stream *stream,
+				 const struct bt_audio_codec_qos_pref *pref)
 {
 	int ret;
 	uint8_t channel_index;
@@ -713,7 +715,7 @@ static void stream_recv_cb(struct bt_bap_stream *stream, const struct bt_iso_rec
 	}
 
 	receive_cb(buf->data, buf->len, bad_frame, info->ts, channel_index,
-		   bt_codec_cfg_get_octets_per_frame(stream->codec));
+		   bt_audio_codec_cfg_get_octets_per_frame(stream->codec));
 }
 #endif /* (CONFIG_BT_AUDIO_RX) */
 
@@ -798,7 +800,7 @@ static void work_stream_start(struct k_work *work)
  * @param loc   Location bitmask setting.
  *
  */
-static void bt_codec_allocation_set(struct bt_codec *codec, enum bt_audio_location loc)
+static void bt_codec_allocation_set(struct bt_audio_codec *codec, enum bt_audio_location loc)
 {
 	for (size_t i = 0; i < codec->data_count; i++) {
 		if (codec->data[i].data.type == BT_CODEC_CONFIG_LC3_CHAN_ALLOC) {
@@ -822,7 +824,7 @@ static void bt_codec_allocation_set(struct bt_codec *codec, enum bt_audio_locati
  *
  * @return True if valid codec capability found, false otherwise
  */
-static bool valid_codec_cap_check(struct bt_codec cap_array[], size_t size)
+static bool valid_codec_cap_check(struct bt_audio_codec cap_array[], size_t size)
 {
 	const struct bt_codec_data *element;
 
@@ -867,7 +869,7 @@ static void discover_sink_cb(struct bt_conn *conn, int err, enum bt_audio_dir di
 	/* At this point the location/channel index of the headset is always known */
 	for (int i = 0; i < CONFIG_CODEC_CAP_COUNT_MAX; i++) {
 		memcpy(&headsets[channel_index].sink_codec_cap[i],
-		       &temp_cap[temp_cap_index].codec[i], sizeof(struct bt_codec));
+		       &temp_cap[temp_cap_index].codec[i], sizeof(struct bt_audio_codec));
 	}
 
 	LOG_DBG("Sink discover complete");
@@ -937,7 +939,7 @@ static void discover_source_cb(struct bt_conn *conn, int err, enum bt_audio_dir 
 	/* At this point the location/channel index of the headset is always known */
 	for (int i = 0; i < temp_cap[temp_cap_index].num_caps; i++) {
 		memcpy(&headsets[channel_index].source_codec_cap[i],
-		       &temp_cap[temp_cap_index].codec[i], sizeof(struct bt_codec));
+		       &temp_cap[temp_cap_index].codec[i], sizeof(struct bt_audio_codec));
 	}
 
 	LOG_DBG("Source discover complete");

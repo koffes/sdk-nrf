@@ -179,7 +179,7 @@ static struct bt_bap_stream_ops stream_ops = {
 #if (CONFIG_AURACAST)
 static void public_broadcast_features_set(uint8_t *features)
 {
-	int freq = bt_codec_cfg_get_freq(&lc3_preset.codec);
+	int freq = bt_audio_codec_cfg_get_freq(&lc3_preset.codec);
 
 	if (features == NULL) {
 		LOG_ERR("No pointer to features");

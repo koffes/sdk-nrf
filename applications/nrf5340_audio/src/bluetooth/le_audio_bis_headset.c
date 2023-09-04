@@ -60,7 +60,7 @@ static uint8_t sync_stream_cnt;
 static uint8_t active_stream_index;
 
 /* We need to set a location as a pre-compile, this changed in initialize */
-static struct bt_codec codec_capabilities =
+static struct bt_audio_codec codec_capabilities =
 	BT_CODEC_LC3_CONFIG_48_4(BT_AUDIO_LOCATION_FRONT_LEFT, BT_AUDIO_CONTEXT_TYPE_MEDIA);
 
 static le_audio_receive_cb receive_cb;
@@ -83,7 +83,7 @@ static void le_audio_event_publish(enum le_audio_evt_type event)
 
 static void print_codec(const struct audio_codec_info *codec)
 {
-	if (codec->id == BT_CODEC_LC3_ID) {
+	if (codec->id == BT_AUDIO_CODEC_LC3_ID) {
 		LOG_INF("Codec config for LC3:");
 		LOG_INF("\tFrequency: %d Hz", codec->frequency);
 		LOG_INF("\tFrame Duration: %d us", codec->frame_duration_us);
@@ -97,18 +97,18 @@ static void print_codec(const struct audio_codec_info *codec)
 	}
 }
 
-static void get_codec_info(const struct bt_codec *codec, struct audio_codec_info *codec_info)
+static void get_codec_info(const struct bt_audio_codec *codec, struct audio_codec_info *codec_info)
 {
-	if (codec->id == BT_CODEC_LC3_ID) {
+	if (codec->id == BT_AUDIO_CODEC_LC3_ID) {
 		/* LC3 uses the generic LTV format - other codecs might do as well */
 		LOG_DBG("Retrieve the codec configuration for LC3");
 		codec_info->id = codec->id;
 		codec_info->cid = codec->cid;
 		codec_info->vid = codec->vid;
-		codec_info->frequency = bt_codec_cfg_get_freq(codec);
-		codec_info->frame_duration_us = bt_codec_cfg_get_frame_duration_us(codec);
-		bt_codec_cfg_get_chan_allocation_val(codec, &codec_info->chan_allocation);
-		codec_info->octets_per_sdu = bt_codec_cfg_get_octets_per_frame(codec);
+		codec_info->frequency = bt_audio_codec_cfg_get_freq(codec);
+		codec_info->frame_duration_us = bt_audio_codec_cfg_get_frame_duration_us(codec);
+		bt_audio_codec_cfg_get_chan_allocation_val(codec, &codec_info->chan_allocation);
+		codec_info->octets_per_sdu = bt_audio_codec_cfg_get_octets_per_frame(codec);
 		codec_info->bitrate =
 			(codec_info->octets_per_sdu * 8 * 1000000) / codec_info->frame_duration_us;
 		codec_info->blocks_per_sdu = bt_codec_cfg_get_frame_blocks_per_sdu(codec, true);
@@ -117,9 +117,9 @@ static void get_codec_info(const struct bt_codec *codec, struct audio_codec_info
 	}
 }
 
-static bool bitrate_check(const struct bt_codec *codec)
+static bool bitrate_check(const struct bt_audio_codec *codec)
 {
-	uint32_t octets_per_sdu = bt_codec_cfg_get_octets_per_frame(codec);
+	uint32_t octets_per_sdu = bt_audio_codec_cfg_get_octets_per_frame(codec);
 
 	if (octets_per_sdu < LE_AUDIO_SDU_SIZE_OCTETS(CONFIG_LC3_BITRATE_MIN)) {
 		LOG_WRN("Bitrate too low");
@@ -253,14 +253,14 @@ static void base_recv_cb(struct bt_bap_broadcast_sink *sink, const struct bt_bap
 
 			LOG_DBG("Subgroup: %d BIS: %d index = %d", i, j, index);
 
-			if (bitrate_check((struct bt_codec *)&base->subgroups[i].codec)) {
+			if (bitrate_check((struct bt_audio_codec *)&base->subgroups[i].codec)) {
 				suitable_stream_found = true;
 
 				bis_index_bitfields[sync_stream_cnt] = BIT(index);
 
 				/* Get general (level 2) codec config from the subgroup */
 				audio_streams[sync_stream_cnt].codec =
-					(struct bt_codec *)&base->subgroups[i].codec;
+					(struct bt_audio_codec *)&base->subgroups[i].codec;
 				get_codec_info(audio_streams[sync_stream_cnt].codec,
 					       &audio_codec_info[sync_stream_cnt]);
 
