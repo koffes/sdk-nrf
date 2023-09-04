@@ -274,9 +274,9 @@ static int adv_create(void)
  * @param codec The preset codec configuration.
  * @param loc   Location bitmask setting.
  */
-static void bt_codec_allocation_set(struct bt_codec_data *codec, enum bt_audio_location loc)
+static void bt_audio_codec_allocation_set(struct bt_codec_data *codec, enum bt_audio_location loc)
 {
-	codec->data.type = BT_CODEC_CONFIG_LC3_CHAN_ALLOC;
+	codec->data.type = BT_AUDIO_CODEC_CONFIG_LC3_CHAN_ALLOC;
 	sys_put_le32(loc, codec->value);
 	codec->data.data = codec->value;
 	codec->data.data_len = 4;
@@ -513,7 +513,7 @@ int le_audio_enable(le_audio_receive_cb recv_cb, le_audio_timestamp_cb timestmp_
 		stream_params[i].data_count = 1U;
 		stream_params[i].data = &bis_codec_data[i];
 		/* The channel allocation is set incrementally */
-		bt_codec_allocation_set(stream_params[i].data, BIT(i));
+		bt_audio_codec_allocation_set(stream_params[i].data, BIT(i));
 	}
 
 	for (size_t i = 0U; i < ARRAY_SIZE(subgroup_params); i++) {

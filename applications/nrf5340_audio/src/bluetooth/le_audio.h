@@ -26,14 +26,14 @@
 #endif /* (CONFIG_AUDIO_SAMPLE_RATE_48000_HZ) */
 
 #define BT_BAP_LC3_PRESET_CONFIGURABLE(_loc, _stream_context, _bitrate)                            \
-	BT_BAP_LC3_PRESET(BT_CODEC_LC3_CONFIG(BT_AUDIO_CODEC_CONFIG_FREQ,                          \
-					      BT_AUDIO_CODEC_CONFIG_LC3_DURATION_10, _loc,         \
-					      LE_AUDIO_SDU_SIZE_OCTETS(_bitrate), 1,               \
-					      _stream_context),                                    \
-			  BT_CODEC_LC3_QOS_10_UNFRAMED(LE_AUDIO_SDU_SIZE_OCTETS(_bitrate),         \
-						       CONFIG_BT_AUDIO_RETRANSMITS,                \
-						       CONFIG_BT_AUDIO_MAX_TRANSPORT_LATENCY_MS,   \
-						       CONFIG_BT_AUDIO_PRESENTATION_DELAY_US))
+	BT_BAP_LC3_PRESET(                                                                         \
+		BT_AUDIO_CODEC_LC3_CONFIG(BT_AUDIO_CODEC_CONFIG_FREQ,                              \
+					  BT_AUDIO_CODEC_CONFIG_LC3_DURATION_10, _loc,             \
+					  LE_AUDIO_SDU_SIZE_OCTETS(_bitrate), 1, _stream_context), \
+		BT_AUDIO_CODEC_LC3_QOS_10_UNFRAMED(LE_AUDIO_SDU_SIZE_OCTETS(_bitrate),             \
+						   CONFIG_BT_AUDIO_RETRANSMITS,                    \
+						   CONFIG_BT_AUDIO_MAX_TRANSPORT_LATENCY_MS,       \
+						   CONFIG_BT_AUDIO_PRESENTATION_DELAY_US))
 
 #if CONFIG_TRANSPORT_CIS
 #if CONFIG_BT_BAP_UNICAST_CONFIGURABLE

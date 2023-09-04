@@ -224,7 +224,7 @@ static int bis_specific_codec_config(struct bt_bap_base_bis_data bis_data,
 				     struct audio_codec_info *codec)
 {
 	for (int i = 0; i < bis_data.data_count; i++) {
-		if (bis_data.data[i].data.type == BT_CODEC_CONFIG_LC3_CHAN_ALLOC) {
+		if (bis_data.data[i].data.type == BT_AUDIO_CODEC_CONFIG_LC3_CHAN_ALLOC) {
 			codec->chan_allocation = sys_get_le32(bis_data.data[i].data.data);
 			LOG_DBG("Location has been overwritten with %d", codec->chan_allocation);
 			return 0;
