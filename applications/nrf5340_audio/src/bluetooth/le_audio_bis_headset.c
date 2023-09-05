@@ -59,9 +59,11 @@ static struct active_audio_stream active_stream;
 static uint8_t sync_stream_cnt;
 static uint8_t active_stream_index;
 
-/* We need to set a location as a pre-compile, this changed in initialize */
-static struct bt_audio_codec codec_capabilities =
-	BT_CODEC_LC3_CONFIG_48_4(BT_AUDIO_LOCATION_FRONT_LEFT, BT_AUDIO_CONTEXT_TYPE_MEDIA);
+static struct bt_audio_codec_cap codec_cap = BT_AUDIO_CODEC_CAP_LC3(
+	BT_AUDIO_CODEC_CAPABILIY_FREQ,
+	(BT_AUDIO_CODEC_LC3_DURATION_10 | BT_AUDIO_CODEC_LC3_DURATION_PREFER_10),
+	BT_AUDIO_CODEC_LC3_CHAN_COUNT_SUPPORT(1), LE_AUDIO_SDU_SIZE_OCTETS(CONFIG_LC3_BITRATE_MIN),
+	LE_AUDIO_SDU_SIZE_OCTETS(CONFIG_LC3_BITRATE_MAX), 1u, BT_AUDIO_CONTEXT_TYPE_MEDIA);
 
 static le_audio_receive_cb receive_cb;
 
@@ -97,7 +99,8 @@ static void print_codec(const struct audio_codec_info *codec)
 	}
 }
 
-static void get_codec_info(const struct bt_audio_codec *codec, struct audio_codec_info *codec_info)
+static void get_codec_info(const struct bt_audio_codec_cfg *codec,
+			   struct audio_codec_info *codec_info)
 {
 	if (codec->id == BT_AUDIO_CODEC_LC3_ID) {
 		/* LC3 uses the generic LTV format - other codecs might do as well */
@@ -111,13 +114,14 @@ static void get_codec_info(const struct bt_audio_codec *codec, struct audio_code
 		codec_info->octets_per_sdu = bt_audio_codec_cfg_get_octets_per_frame(codec);
 		codec_info->bitrate =
 			(codec_info->octets_per_sdu * 8 * 1000000) / codec_info->frame_duration_us;
-		codec_info->blocks_per_sdu = bt_codec_cfg_get_frame_blocks_per_sdu(codec, true);
+		codec_info->blocks_per_sdu =
+			bt_audio_codec_cfg_get_frame_blocks_per_sdu(codec, true);
 	} else {
 		LOG_WRN("Codec is not LC3, codec_id: 0x%2hhx", codec->id);
 	}
 }
 
-static bool bitrate_check(const struct bt_audio_codec *codec)
+static bool bitrate_check(const struct bt_audio_codec_cfg *codec)
 {
 	uint32_t octets_per_sdu = bt_audio_codec_cfg_get_octets_per_frame(codec);
 
@@ -175,43 +179,57 @@ static struct bt_bap_stream_ops stream_ops = {
 #endif /* (CONFIG_BT_AUDIO_RX) */
 };
 
-static void pa_synced_cb(struct bt_bap_broadcast_sink *sink, struct bt_le_per_adv_sync *sync,
-			 uint32_t broadcast_id)
+/* TODO: Resolve
+ *  static void pa_synced_cb(struct bt_bap_broadcast_sink *sink, struct bt_le_per_adv_sync *sync,
+ *			 uint32_t broadcast_id)
+ *{
+ *	if (broadcast_sink != NULL) {
+ *		LOG_ERR("Unexpected PA sync");
+ *		return;
+ *	}
+ *
+ *	broadcast_sink = sink;
+ *
+ *	LOG_DBG("Broadcast source PA synced, waiting for BASE");
+ *}
+ */
+
+/*TODO: Resolve
+ *static void pa_sync_lost_cb(struct bt_bap_broadcast_sink *sink)
+ *{
+ *	int ret;
+ *
+ *	LOG_DBG("Periodic advertising sync lost");
+ *
+ *	if (broadcast_sink == NULL) {
+ *		LOG_ERR("Unexpected PA sync lost");
+ *		return;
+ *	}
+ *
+ *	if (!init_routine_completed) {
+ *		return;
+ *	}
+ *
+ *	LOG_DBG("Sink disconnected");
+ *
+ *	ret = bis_headset_cleanup();
+ *	if (ret) {
+ *		LOG_ERR("Error cleaning up");
+ *		return;
+ *	}
+ *
+ *	le_audio_event_publish(LE_AUDIO_EVT_PA_SYNC_LOST);
+ *}
+ */
+
+static bool parse_cb(struct bt_data *data, void *codec)
 {
-	if (broadcast_sink != NULL) {
-		LOG_ERR("Unexpected PA sync");
-		return;
+	if (data->type == BT_AUDIO_CODEC_CONFIG_LC3_CHAN_ALLOC) {
+		((struct audio_codec_info *)codec)->chan_allocation = sys_get_le32(data->data);
+		return false;
 	}
 
-	broadcast_sink = sink;
-
-	LOG_DBG("Broadcast source PA synced, waiting for BASE");
-}
-
-static void pa_sync_lost_cb(struct bt_bap_broadcast_sink *sink)
-{
-	int ret;
-
-	LOG_DBG("Periodic advertising sync lost");
-
-	if (broadcast_sink == NULL) {
-		LOG_ERR("Unexpected PA sync lost");
-		return;
-	}
-
-	if (!init_routine_completed) {
-		return;
-	}
-
-	LOG_DBG("Sink disconnected");
-
-	ret = bis_headset_cleanup();
-	if (ret) {
-		LOG_ERR("Error cleaning up");
-		return;
-	}
-
-	le_audio_event_publish(LE_AUDIO_EVT_PA_SYNC_LOST);
+	return true;
 }
 
 /**
@@ -223,15 +241,15 @@ static void pa_sync_lost_cb(struct bt_bap_broadcast_sink *sink)
 static int bis_specific_codec_config(struct bt_bap_base_bis_data bis_data,
 				     struct audio_codec_info *codec)
 {
-	for (int i = 0; i < bis_data.data_count; i++) {
-		if (bis_data.data[i].data.type == BT_AUDIO_CODEC_CONFIG_LC3_CHAN_ALLOC) {
-			codec->chan_allocation = sys_get_le32(bis_data.data[i].data.data);
-			LOG_DBG("Location has been overwritten with %d", codec->chan_allocation);
-			return 0;
-		}
+	int ret;
+
+	ret = bt_audio_data_parse(bis_data.data, bis_data.data_len, parse_cb, codec);
+	if (ret) {
+		LOG_WRN("Could not overwrite BIS specific codec info");
+		return -ENXIO;
 	}
 
-	return -ENXIO;
+	return 0;
 }
 
 static void base_recv_cb(struct bt_bap_broadcast_sink *sink, const struct bt_bap_base *base)
@@ -253,15 +271,15 @@ static void base_recv_cb(struct bt_bap_broadcast_sink *sink, const struct bt_bap
 
 			LOG_DBG("Subgroup: %d BIS: %d index = %d", i, j, index);
 
-			if (bitrate_check((struct bt_audio_codec *)&base->subgroups[i].codec)) {
+			if (bitrate_check(&base->subgroups[i].codec_cfg)) {
 				suitable_stream_found = true;
 
 				bis_index_bitfields[sync_stream_cnt] = BIT(index);
 
 				/* Get general (level 2) codec config from the subgroup */
-				audio_streams[sync_stream_cnt].codec =
-					(struct bt_audio_codec *)&base->subgroups[i].codec;
-				get_codec_info(audio_streams[sync_stream_cnt].codec,
+				audio_streams[sync_stream_cnt].codec_cfg =
+					(struct bt_audio_codec_cfg *)&base->subgroups[i].codec_cfg;
+				get_codec_info(audio_streams[sync_stream_cnt].codec_cfg,
 					       &audio_codec_info[sync_stream_cnt]);
 
 				/* Overwrite codec config with level 3 BIS specific codec config.
@@ -354,14 +372,14 @@ static void syncable_cb(struct bt_bap_broadcast_sink *sink, bool encrypted)
 }
 
 static struct bt_bap_broadcast_sink_cb broadcast_sink_cbs = {
-	.pa_synced = pa_synced_cb,
-	.pa_sync_lost = pa_sync_lost_cb,
+	/*.pa_synced = pa_synced_cb,*/
+	/*.pa_sync_lost = pa_sync_lost_cb,*/
 	.base_recv = base_recv_cb,
 	.syncable = syncable_cb,
 };
 
 static struct bt_pacs_cap capabilities = {
-	.codec = &codec_capabilities,
+	.codec_cap = &codec_cap,
 };
 
 static int initialize(le_audio_receive_cb recv_cb)
@@ -519,6 +537,7 @@ void le_audio_conn_set(struct bt_conn *conn)
 int le_audio_pa_sync_set(struct bt_le_per_adv_sync *pa_sync, uint32_t broadcast_id)
 {
 	int ret;
+	struct bt_bap_broadcast_sink *created_sink;
 
 	if (pa_sync == NULL) {
 		LOG_ERR("Invalid PA sync received");
@@ -539,7 +558,7 @@ int le_audio_pa_sync_set(struct bt_le_per_adv_sync *pa_sync, uint32_t broadcast_
 		}
 	}
 
-	ret = bt_bap_broadcast_sink_create(pa_sync, broadcast_id);
+	ret = bt_bap_broadcast_sink_create(pa_sync, broadcast_id, &created_sink);
 	if (ret) {
 		LOG_WRN("Failed to create sink: %d", ret);
 		return ret;
