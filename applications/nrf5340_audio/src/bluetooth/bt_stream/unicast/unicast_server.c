@@ -13,7 +13,6 @@
 #include <zephyr/bluetooth/audio/pacs.h>
 #include <zephyr/bluetooth/audio/csip.h>
 #include <zephyr/bluetooth/audio/cap.h>
-#include <zephyr/bluetooth/audio/tmap.h>
 
 /* TODO: Remove when a get_info function is implemented in host */
 #include <../subsys/bluetooth/audio/bap_endpoint.h>
@@ -24,6 +23,9 @@
 
 #include <zephyr/logging/log.h>
 LOG_MODULE_REGISTER(unicast_server, CONFIG_BLE_LOG_LEVEL);
+
+BUILD_ASSERT(CONFIG_BT_ASCS_ASE_SRC_COUNT <= 1,
+	     "A maximum of one source stream is currently supported");
 
 ZBUS_CHAN_DEFINE(le_audio_chan, struct le_audio_msg, NULL, NULL, ZBUS_OBSERVERS_EMPTY,
 		 ZBUS_MSG_INIT(0));
@@ -64,40 +66,31 @@ static uint8_t csip_rsi_adv_data[BT_CSIP_RSI_SIZE];
 
 static uint8_t flags_adv_data[] = {BT_LE_AD_GENERAL | BT_LE_AD_NO_BREDR};
 
-static uint8_t gap_appear_adv_data[] = {
-	BT_BYTES_LIST_LE16(BT_APPEARANCE_WEARABLE_AUDIO_DEVICE_EARBUD)};
+static uint8_t gap_appear_adv_data[] = {BT_BYTES_LIST_LE16(CONFIG_BT_DEVICE_APPEARANCE)};
 
 static const uint8_t cap_adv_data[] = {
 	BT_UUID_16_ENCODE(BT_UUID_CAS_VAL),
 	BT_AUDIO_UNICAST_ANNOUNCEMENT_TARGETED,
 };
 
-static uint8_t tmap_adv_data[] = {
-	BT_UUID_16_ENCODE(BT_UUID_TMAS_VAL),
-	BT_BYTES_LIST_LE16(BT_TMAP_ROLE_UMR | BT_TMAP_ROLE_CT),
-};
-
 static uint8_t csis_rsi_adv_data[BT_CSIP_RSI_SIZE];
 
-#if defined(CONFIG_BT_AUDIO_TX)
 #define AVAILABLE_SOURCE_CONTEXT                                                                   \
-	(BT_AUDIO_CONTEXT_TYPE_UNSPECIFIED | BT_AUDIO_CONTEXT_TYPE_CONVERSATIONAL |                \
-	 BT_AUDIO_CONTEXT_TYPE_MEDIA)
-#else
-#define AVAILABLE_SOURCE_CONTEXT 0x0000
-#endif
+	(BT_AUDIO_CONTEXT_TYPE_UNSPECIFIED | BT_AUDIO_CONTEXT_TYPE_CONVERSATIONAL)
 
-#if defined(CONFIG_BT_AUDIO_RX)
-#define AVAILABLE_SINK_CONTEXT (BT_AUDIO_CONTEXT_TYPE_UNSPECIFIED | BT_AUDIO_CONTEXT_TYPE_MEDIA)
-#else
-#define AVAILABLE_SINK_CONTEXT 0x0000
-#endif
+#define AVAILABLE_SINK_CONTEXT                                                                     \
+	(BT_AUDIO_CONTEXT_TYPE_UNSPECIFIED | BT_AUDIO_CONTEXT_TYPE_MEDIA |                         \
+	 BT_AUDIO_CONTEXT_TYPE_CONVERSATIONAL)
 
 static uint8_t unicast_server_adv_data[] = {
 	BT_UUID_16_ENCODE(BT_UUID_ASCS_VAL),
 	BT_AUDIO_UNICAST_ANNOUNCEMENT_TARGETED,
+#if defined(CONFIG_BT_AUDIO_RX)
 	BT_BYTES_LIST_LE16(AVAILABLE_SINK_CONTEXT),
+#endif /* CONFIG_BT_AUDIO_RX */
+#if defined(CONFIG_BT_AUDIO_TX)
 	BT_BYTES_LIST_LE16(AVAILABLE_SOURCE_CONTEXT),
+#endif	      /* CONFIG_BT_AUDIO_TX */
 	0x00, /* Metadata length */
 };
 
@@ -466,67 +459,23 @@ int unicast_server_config_get(uint32_t *bitrate, uint32_t *sampling_rate_hz,
 	return 0;
 }
 
-int unicast_server_adv_get(struct net_buf_simple *uuid_buf, struct bt_data *adv_buf,
-			   uint8_t adv_buf_vacant)
+static int adv_buf_put(struct bt_data *adv_buf, uint8_t adv_buf_vacant, int *index, uint8_t type,
+		       size_t data_len, const uint8_t *data)
 {
-	int adv_buf_cnt = 0;
-
-	if ((adv_buf_vacant - adv_buf_cnt) == 0) {
+	if ((adv_buf_vacant - *index) <= 0) {
 		return -ENOMEM;
 	}
 
-	adv_buf[adv_buf_cnt].type = BT_DATA_SVC_DATA16;
-	adv_buf[adv_buf_cnt].data_len = ARRAY_SIZE(unicast_server_adv_data);
-	adv_buf[adv_buf_cnt].data = &unicast_server_adv_data[0];
-	adv_buf_cnt++;
+	adv_buf[*index].type = type;
+	adv_buf[*index].data_len = data_len;
+	adv_buf[*index].data = data;
+	(*index)++;
 
-	if ((adv_buf_vacant - adv_buf_cnt) == 0) {
-		return -ENOMEM;
-	}
+	return 0;
+}
 
-	adv_buf[adv_buf_cnt].type = BT_DATA_SVC_DATA16;
-	adv_buf[adv_buf_cnt].data_len = ARRAY_SIZE(tmap_adv_data);
-	adv_buf[adv_buf_cnt].data = &tmap_adv_data[0];
-	adv_buf_cnt++;
-
-#if defined(CONFIG_BT_CSIP_SET_MEMBER)
-	if ((adv_buf_vacant - adv_buf_cnt) == 0) {
-		return -ENOMEM;
-	}
-
-	adv_buf[adv_buf_cnt].type = BT_DATA_CSIS_RSI;
-	adv_buf[adv_buf_cnt].data_len = ARRAY_SIZE(csis_rsi_adv_data);
-	adv_buf[adv_buf_cnt].data = &csis_rsi_adv_data[0];
-	adv_buf_cnt++;
-#endif /* CONFIG_BT_CSIP_SET_MEMBER */
-
-	if ((adv_buf_vacant - adv_buf_cnt) == 0) {
-		return -ENOMEM;
-	}
-
-	adv_buf[adv_buf_cnt].type = BT_DATA_GAP_APPEARANCE;
-	adv_buf[adv_buf_cnt].data_len = ARRAY_SIZE(gap_appear_adv_data);
-	adv_buf[adv_buf_cnt].data = &gap_appear_adv_data[0];
-	adv_buf_cnt++;
-
-	if ((adv_buf_vacant - adv_buf_cnt) == 0) {
-		return -ENOMEM;
-	}
-
-	adv_buf[adv_buf_cnt].type = BT_DATA_FLAGS;
-	adv_buf[adv_buf_cnt].data_len = ARRAY_SIZE(flags_adv_data);
-	adv_buf[adv_buf_cnt].data = &flags_adv_data[0];
-	adv_buf_cnt++;
-
-	if ((adv_buf_vacant - adv_buf_cnt) == 0) {
-		return -ENOMEM;
-	}
-
-	adv_buf[adv_buf_cnt].type = BT_DATA_SVC_DATA16;
-	adv_buf[adv_buf_cnt].data_len = ARRAY_SIZE(cap_adv_data);
-	adv_buf[adv_buf_cnt].data = &cap_adv_data[0];
-	adv_buf_cnt++;
-
+int unicast_server_uuid_populate(struct net_buf_simple *uuid_buf)
+{
 	if (net_buf_simple_tailroom(uuid_buf) >= (BT_UUID_SIZE_16 * 2)) {
 		net_buf_simple_add_le16(uuid_buf, BT_UUID_ASCS_VAL);
 		net_buf_simple_add_le16(uuid_buf, BT_UUID_PACS_VAL);
@@ -534,6 +483,46 @@ int unicast_server_adv_get(struct net_buf_simple *uuid_buf, struct bt_data *adv_
 	} else {
 		LOG_ERR("Not enough space for UUIDS");
 		return -ENOMEM;
+	}
+
+	return 0;
+}
+
+int unicast_server_adv_populate(struct bt_data *adv_buf, uint8_t adv_buf_vacant)
+{
+	int ret;
+	int adv_buf_cnt = 0;
+
+	ret = adv_buf_put(adv_buf, adv_buf_vacant, &adv_buf_cnt, BT_DATA_SVC_DATA16,
+			  ARRAY_SIZE(unicast_server_adv_data), &unicast_server_adv_data[0]);
+	if (ret) {
+		return ret;
+	}
+
+#if defined(CONFIG_BT_CSIP_SET_MEMBER)
+	ret = adv_buf_put(adv_buf, adv_buf_vacant, &adv_buf_cnt, BT_DATA_CSIS_RSI,
+			  ARRAY_SIZE(csis_rsi_adv_data), &csis_rsi_adv_data[0]);
+	if (ret) {
+		return ret;
+	}
+#endif /* CONFIG_BT_CSIP_SET_MEMBER */
+
+	ret = adv_buf_put(adv_buf, adv_buf_vacant, &adv_buf_cnt, BT_DATA_GAP_APPEARANCE,
+			  ARRAY_SIZE(gap_appear_adv_data), &gap_appear_adv_data[0]);
+	if (ret) {
+		return ret;
+	}
+
+	ret = adv_buf_put(adv_buf, adv_buf_vacant, &adv_buf_cnt, BT_DATA_FLAGS,
+			  ARRAY_SIZE(flags_adv_data), &flags_adv_data[0]);
+	if (ret) {
+		return ret;
+	}
+
+	ret = adv_buf_put(adv_buf, adv_buf_vacant, &adv_buf_cnt, BT_DATA_SVC_DATA16,
+			  ARRAY_SIZE(cap_adv_data), &cap_adv_data[0]);
+	if (ret) {
+		return ret;
 	}
 
 	return adv_buf_cnt;
@@ -546,8 +535,9 @@ int unicast_server_send(struct encoded_audio enc_audio)
 	struct net_buf *buf;
 	static bool hci_wrn_printed;
 
-	if (enc_audio.num_ch != 1) {
-		LOG_ERR("Num encoded channels must be 1");
+	if (enc_audio.num_ch > CONFIG_BT_ASCS_ASE_SRC_COUNT) {
+		LOG_ERR("Trying to send %d channel(s), but %d ASEs are configured for source",
+			enc_audio.num_ch, CONFIG_BT_ASCS_ASE_SRC_COUNT);
 		return -EINVAL;
 	}
 
@@ -602,6 +592,11 @@ int unicast_server_send(struct encoded_audio enc_audio)
 #else
 	return -ENOTSUP;
 #endif /* (CONFIG_BT_AUDIO_TX) */
+}
+
+int unicast_server_disable(void)
+{
+	return -ENOTSUP;
 }
 
 int unicast_server_enable(le_audio_receive_cb recv_cb, timestamp_cb timestmp_cb)

@@ -35,18 +35,27 @@ int unicast_server_config_get(uint32_t *bitrate, uint32_t *sampling_rate_hz,
 			      uint32_t *pres_delay_us);
 
 /**
- * @brief	Get advertising data from this module.
+ * @brief	Put the UUIDs from this module into the buffer.
  *
  * @note	This partial data is used to build a complete extended advertising packet.
  *
- * @param [in/out] uuid_buf	Buffer being populated with UUIDs.
- * @param [in/out] adv_buf	Buffer being populated with ext adv elements.
- * @param [in] adv_buf_vacant	Number of vacant elements in @p adv_buf.
+ * @param[out]	uuid_buf	Buffer being populated with UUIDs.
+ *
+ * @return	0 for success, error otherwise.
+ */
+int unicast_server_uuid_populate(struct net_buf_simple *uuid_buf);
+
+/**
+ * @brief	Put the advertising data from this module into the buffer.
+ *
+ * @note	This partial data is used to build a complete extended advertising packet.
+ *
+ * @param[out]	adv_buf		Buffer being populated with ext adv elements.
+ * @param[in]	adv_buf_vacant	Number of vacant elements in @p adv_buf.
  *
  * @return	Negative values for errors or num elements added to @p adv_buf.
  */
-int unicast_server_adv_get(struct net_buf_simple *uuid_buf, struct bt_data *adv_buf,
-			   uint8_t adv_buf_vacant);
+int unicast_server_adv_populate(struct bt_data *adv_buf, uint8_t adv_buf_vacant);
 
 /**
  * @brief	Send data from the LE Audio unicast (CIS) server, if configured as a source.
@@ -56,6 +65,14 @@ int unicast_server_adv_get(struct net_buf_simple *uuid_buf, struct bt_data *adv_
  * @return	0 for success, error otherwise.
  */
 int unicast_server_send(struct encoded_audio enc_audio);
+
+/**
+ * @brief	Disable the Bluetooth LE Audio unicast (CIS) server.
+ *
+ * @return	0 for success, error otherwise.
+ */
+
+int unicast_server_disable(void);
 
 /**
  * @brief	Enable the Bluetooth LE Audio unicast (CIS) server.

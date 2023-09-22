@@ -133,5 +133,9 @@ module = BROADCAST_SOURCE
 module-str = broadcast_source
 source "subsys/logging/Kconfig.template.log_config"
 
+module = BROADCAST_SINK
+module-str = broadcast_sink
+source "subsys/logging/Kconfig.template.log_config"
+
 endmenu # Log levels
 endmenu # Broadcast

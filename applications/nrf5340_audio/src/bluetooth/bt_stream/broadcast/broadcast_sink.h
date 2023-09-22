@@ -57,14 +57,14 @@ int broadcast_sink_start(void);
 int broadcast_sink_stop(void);
 
 /**
- * @brief	Disable the LE Audio broadcast sink.
+ * @brief	Disable the LE Audio broadcast (BIS) sink.
  *
  * @return	0 for success, error otherwise.
  */
 int broadcast_sink_disable(void);
 
 /**
- * @brief	Enable the LE Audio broadcast sink.
+ * @brief	Enable the LE Audio broadcast (BIS) sink.
  *
  * @param[in]	recv_cb		Callback for receiving Bluetooth LE Audio data.
  *

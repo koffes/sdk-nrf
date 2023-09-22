@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2018 Nordic Semiconductor ASA
+ * Copyright (c) 2023 Nordic Semiconductor ASA
  *
  * SPDX-License-Identifier: LicenseRef-Nordic-5-Clause
  */
@@ -38,12 +38,10 @@ DATA_FIFO_DEFINE(ble_fifo_rx, CONFIG_BUF_BLE_RX_PACKET_NUM, WB_UP(sizeof(struct 
 
 ZBUS_SUBSCRIBER_DEFINE(button_evt_sub, CONFIG_BUTTON_MSG_SUB_QUEUE_SIZE);
 ZBUS_SUBSCRIBER_DEFINE(le_audio_evt_sub, CONFIG_LE_AUDIO_MSG_SUB_QUEUE_SIZE);
-ZBUS_SUBSCRIBER_DEFINE(content_control_evt_sub, CONFIG_CONTENT_CONTROL_MSG_SUB_QUEUE_SIZE);
 
 ZBUS_CHAN_DECLARE(button_chan);
 ZBUS_CHAN_DECLARE(le_audio_chan);
 ZBUS_CHAN_DECLARE(bt_mgmt_chan);
-ZBUS_CHAN_DECLARE(cont_media_chan);
 ZBUS_CHAN_DECLARE(volume_chan);
 
 ZBUS_OBS_DECLARE(volume_evt_sub);
@@ -59,8 +57,6 @@ static k_tid_t le_audio_msg_sub_thread_id;
 K_THREAD_STACK_DEFINE(audio_datapath_thread_stack, CONFIG_AUDIO_DATAPATH_STACK_SIZE);
 K_THREAD_STACK_DEFINE(button_msg_sub_thread_stack, CONFIG_BUTTON_MSG_SUB_STACK_SIZE);
 K_THREAD_STACK_DEFINE(le_audio_msg_sub_thread_stack, CONFIG_LE_AUDIO_MSG_SUB_STACK_SIZE);
-K_THREAD_STACK_DEFINE(content_control_msg_sub_thread_stack,
-		      CONFIG_CONTENT_CONTROL_MSG_SUB_STACK_SIZE);
 
 static enum stream_state strm_state = STATE_PAUSED;
 #define TEST_TONE_BASE_FREQ_HZ 1000
@@ -184,33 +180,6 @@ static void audio_datapath_thread(void *dummy1, void *dummy2, void *dummy3)
 static void stream_state_set(enum stream_state stream_state_new)
 {
 	strm_state = stream_state_new;
-}
-
-uint8_t stream_state_get(void)
-{
-	return strm_state;
-}
-
-void streamctrl_send(void const *const data, size_t size, uint8_t num_ch)
-{
-	int ret;
-	static int prev_ret;
-
-	struct encoded_audio enc_audio = {.data = data, .size = size, .num_ch = num_ch};
-
-	if (strm_state == STATE_STREAMING) {
-		ret = unicast_server_send(enc_audio);
-
-		if (ret != 0 && ret != prev_ret) {
-			if (ret == -ECANCELED) {
-				LOG_WRN("Sending operation cancelled");
-			} else {
-				LOG_WRN("Problem with sending LE audio data, ret: %d", ret);
-			}
-		}
-
-		prev_ret = ret;
-	}
 }
 
 static int test_tone_start(void)
@@ -368,11 +337,9 @@ static void le_audio_msg_sub_thread(void)
 		ret = zbus_chan_read(chan, &msg, ZBUS_READ_TIMEOUT_MS);
 		ERR_CHK(ret);
 
-		uint8_t event = msg.event;
+		LOG_DBG("Received event = %d, current state = %d", msg.event, strm_state);
 
-		LOG_DBG("Received event = %d, current state = %d", event, strm_state);
-
-		switch (event) {
+		switch (msg.event) {
 		case LE_AUDIO_EVT_STREAMING:
 			LOG_DBG("LE audio evt: streaming");
 
@@ -447,13 +414,45 @@ static void le_audio_msg_sub_thread(void)
 			break;
 
 		default:
-			LOG_WRN("Unexpected/unhandled le_audio event: %d", event);
+			LOG_WRN("Unexpected/unhandled le_audio event: %d", msg.event);
 
 			break;
 		}
 
 		STACK_USAGE_PRINT("le_audio_msg_thread", &le_audio_msg_sub_thread_data);
 	}
+}
+
+/**
+ * @brief	Create zbus subscriber threads.
+ *
+ * @return	0 for success, error otherwise.
+ */
+static int zbus_subscribers_create(void)
+{
+	int ret;
+
+	button_msg_sub_thread_id = k_thread_create(
+		&button_msg_sub_thread_data, button_msg_sub_thread_stack,
+		CONFIG_BUTTON_MSG_SUB_STACK_SIZE, (k_thread_entry_t)button_msg_sub_thread, NULL,
+		NULL, NULL, K_PRIO_PREEMPT(CONFIG_BUTTON_MSG_SUB_THREAD_PRIO), 0, K_NO_WAIT);
+	ret = k_thread_name_set(button_msg_sub_thread_id, "BUTTON_MSG_SUB");
+	if (ret) {
+		LOG_ERR("Failed to create button_msg thread");
+		return ret;
+	}
+
+	le_audio_msg_sub_thread_id = k_thread_create(
+		&le_audio_msg_sub_thread_data, le_audio_msg_sub_thread_stack,
+		CONFIG_LE_AUDIO_MSG_SUB_STACK_SIZE, (k_thread_entry_t)le_audio_msg_sub_thread, NULL,
+		NULL, NULL, K_PRIO_PREEMPT(CONFIG_LE_AUDIO_MSG_SUB_THREAD_PRIO), 0, K_NO_WAIT);
+	ret = k_thread_name_set(le_audio_msg_sub_thread_id, "LE_AUDIO_MSG_SUB");
+	if (ret) {
+		LOG_ERR("Failed to create le_audio_msg thread");
+		return ret;
+	}
+
+	return 0;
 }
 
 /**
@@ -468,9 +467,8 @@ static void bt_mgmt_evt_handler(const struct zbus_channel *chan)
 	const struct bt_mgmt_msg *msg;
 
 	msg = zbus_chan_const_msg(chan);
-	uint8_t event = msg->event;
 
-	switch (event) {
+	switch (msg->event) {
 	case BT_MGMT_CONNECTED:
 		LOG_INF("Connected");
 
@@ -504,7 +502,7 @@ static void bt_mgmt_evt_handler(const struct zbus_channel *chan)
 		break;
 
 	default:
-		LOG_WRN("Unexpected/unhandled bt_mgmt event: %d", event);
+		LOG_WRN("Unexpected/unhandled bt_mgmt event: %d", msg->event);
 
 		break;
 	}
@@ -544,37 +542,12 @@ static int zbus_link_producers_observers(void)
 		return ret;
 	}
 
-	ret = zbus_chan_add_obs(&cont_media_chan, &content_control_evt_sub,
-				ZBUS_ADD_OBS_TIMEOUT_MS);
-	if (ret) {
-		LOG_ERR("Failed to add content control sub");
-		return ret;
-	}
-
 	return 0;
 }
 
-static int threads_start(void)
+static int audio_datapath_thread_create(void)
 {
 	int ret;
-
-	button_msg_sub_thread_id = k_thread_create(
-		&button_msg_sub_thread_data, button_msg_sub_thread_stack,
-		CONFIG_BUTTON_MSG_SUB_STACK_SIZE, (k_thread_entry_t)button_msg_sub_thread, NULL,
-		NULL, NULL, K_PRIO_PREEMPT(CONFIG_BUTTON_MSG_SUB_THREAD_PRIO), 0, K_NO_WAIT);
-	ret = k_thread_name_set(button_msg_sub_thread_id, "BUTTON_MSG_SUB");
-	if (ret) {
-		return ret;
-	}
-
-	le_audio_msg_sub_thread_id = k_thread_create(
-		&le_audio_msg_sub_thread_data, le_audio_msg_sub_thread_stack,
-		CONFIG_LE_AUDIO_MSG_SUB_STACK_SIZE, (k_thread_entry_t)le_audio_msg_sub_thread, NULL,
-		NULL, NULL, K_PRIO_PREEMPT(CONFIG_LE_AUDIO_MSG_SUB_THREAD_PRIO), 0, K_NO_WAIT);
-	ret = k_thread_name_set(le_audio_msg_sub_thread_id, "LE_AUDIO_MSG_SUB");
-	if (ret) {
-		return ret;
-	}
 
 	audio_datapath_thread_id = k_thread_create(
 		&audio_datapath_thread_data, audio_datapath_thread_stack,
@@ -582,74 +555,72 @@ static int threads_start(void)
 		NULL, NULL, K_PRIO_PREEMPT(CONFIG_AUDIO_DATAPATH_THREAD_PRIO), 0, K_NO_WAIT);
 	ret = k_thread_name_set(audio_datapath_thread_id, "AUDIO DATAPATH");
 	if (ret) {
+		LOG_ERR("Failed to create audio_datapath thread");
 		return ret;
 	}
 
 	return 0;
 }
 
-int streamctrl_start(void)
+uint8_t stream_state_get(void)
+{
+	return strm_state;
+}
+
+void streamctrl_send(void const *const data, size_t size, uint8_t num_ch)
+{
+	int ret;
+	static int prev_ret;
+
+	struct encoded_audio enc_audio = {.data = data, .size = size, .num_ch = num_ch};
+
+	if (strm_state == STATE_STREAMING) {
+		ret = unicast_server_send(enc_audio);
+
+		if (ret != 0 && ret != prev_ret) {
+			if (ret == -ECANCELED) {
+				LOG_WRN("Sending operation cancelled");
+			} else {
+				LOG_WRN("Problem with sending LE audio data, ret: %d", ret);
+			}
+		}
+
+		prev_ret = ret;
+	}
+}
+
+static int ext_adv_populate(struct bt_data *ext_adv_buf, size_t ext_adv_buf_size,
+			    size_t *ext_adv_count)
 {
 	int ret;
 	size_t ext_adv_buf_cnt = 0;
-	static bool started;
-	struct bt_data ext_adv_buf[CONFIG_EXT_ADV_BUF_MAX];
 
 	NET_BUF_SIMPLE_DEFINE(uuid_buf, CONFIG_EXT_ADV_UUID_BUF_MAX);
-
-	if (started) {
-		LOG_WRN("Streamctrl already started");
-		return -EALREADY;
-	}
-
-	ret = audio_system_init();
-	ERR_CHK(ret);
-
-	ret = zbus_link_producers_observers();
-	ERR_CHK(ret);
-
-	ret = data_fifo_init(&ble_fifo_rx);
-	ERR_CHK_MSG(ret, "Failed to set up ble_rx FIFO");
-
-	ret = threads_start();
-	ERR_CHK(ret);
-
-	ret = unicast_server_enable(le_audio_rx_data_handler, NULL);
-	ERR_CHK_MSG(ret, "Failed to enable LE Audio");
-
-	ret = bt_rend_init();
-	ERR_CHK(ret);
-
-	ret = bt_content_ctrl_init();
-	ERR_CHK(ret);
 
 	ext_adv_buf[ext_adv_buf_cnt].type = BT_DATA_UUID16_SOME;
 	ext_adv_buf[ext_adv_buf_cnt].data_len = 0;
 	ext_adv_buf[ext_adv_buf_cnt].data = uuid_buf.data;
 	ext_adv_buf_cnt++;
 
-	ret = bt_rend_adv_get(&uuid_buf, &ext_adv_buf[ext_adv_buf_cnt],
-			      ARRAY_SIZE(ext_adv_buf) - ext_adv_buf_cnt);
+	ret = bt_rend_uuid_populate(&uuid_buf);
 
-	if (ret < 0) {
+	if (ret) {
+		LOG_ERR("Failed to add adv data from renderer: %d", ret);
 		return ret;
 	}
 
-	ext_adv_buf_cnt += ret;
+	ret = bt_content_ctrl_uuid_populate(&uuid_buf);
 
-	ret = bt_content_ctrl_adv_get(&uuid_buf, &ext_adv_buf[ext_adv_buf_cnt],
-				      ARRAY_SIZE(ext_adv_buf) - ext_adv_buf_cnt);
-
-	if (ret < 0) {
+	if (ret) {
+		LOG_ERR("Failed to add adv data from content ctrl: %d", ret);
 		return ret;
 	}
 
-	ext_adv_buf_cnt += ret;
-
-	ret = unicast_server_adv_get(&uuid_buf, &ext_adv_buf[ext_adv_buf_cnt],
-				     ARRAY_SIZE(ext_adv_buf) - ext_adv_buf_cnt);
+	ret = unicast_server_adv_populate(&ext_adv_buf[ext_adv_buf_cnt],
+					  ext_adv_buf_size - ext_adv_buf_cnt);
 
 	if (ret < 0) {
+		LOG_ERR("Failed to add adv data from unicast server: %d", ret);
 		return ret;
 	}
 
@@ -660,6 +631,50 @@ int streamctrl_start(void)
 
 	LOG_DBG("Size of adv data: %d, num_elements: %d", sizeof(struct bt_data) * ext_adv_buf_cnt,
 		ext_adv_buf_cnt);
+
+	*ext_adv_count = ext_adv_buf_cnt;
+
+	return 0;
+}
+
+int streamctrl_start(void)
+{
+	int ret;
+	static bool started;
+	struct bt_data ext_adv_buf[CONFIG_EXT_ADV_BUF_MAX];
+	size_t ext_adv_buf_cnt;
+
+	if (started) {
+		LOG_WRN("Streamctrl already started");
+		return -EALREADY;
+	}
+
+	ret = audio_system_init();
+	ERR_CHK(ret);
+
+	ret = data_fifo_init(&ble_fifo_rx);
+	ERR_CHK_MSG(ret, "Failed to set up ble_rx FIFO");
+
+	ret = zbus_subscribers_create();
+	ERR_CHK_MSG(ret, "Failed to create zbus subscriber threads");
+
+	ret = zbus_link_producers_observers();
+	ERR_CHK_MSG(ret, "Failed to link zbus producers and observers");
+
+	ret = audio_datapath_thread_create();
+	ERR_CHK_MSG(ret, "Failed to create audio datapath thread");
+
+	ret = unicast_server_enable(le_audio_rx_data_handler, NULL);
+	ERR_CHK_MSG(ret, "Failed to enable LE Audio");
+
+	ret = bt_rend_init();
+	ERR_CHK(ret);
+
+	ret = bt_content_ctrl_init();
+	ERR_CHK(ret);
+
+	ret = ext_adv_populate(ext_adv_buf, ARRAY_SIZE(ext_adv_buf), &ext_adv_buf_cnt);
+	ERR_CHK(ret);
 
 	ret = bt_mgmt_adv_start(ext_adv_buf, ext_adv_buf_cnt, NULL, 0, true);
 	ERR_CHK(ret);

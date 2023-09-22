@@ -118,8 +118,7 @@ int bt_rend_discover(struct bt_conn *conn)
 	return 0;
 }
 
-int bt_rend_adv_get(struct net_buf_simple *uuid_buf, struct bt_data *adv_buf,
-		    uint8_t adv_buf_vacant)
+int bt_rend_uuid_populate(struct net_buf_simple *uuid_buf)
 {
 	if (IS_ENABLED(CONFIG_BT_VCP_VOL_REND)) {
 		if (net_buf_simple_tailroom(uuid_buf) >= BT_UUID_SIZE_16) {

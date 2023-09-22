@@ -162,11 +162,9 @@ static void le_audio_msg_sub_thread(void)
 		ret = zbus_chan_read(chan, &msg, ZBUS_READ_TIMEOUT_MS);
 		ERR_CHK(ret);
 
-		uint8_t event = msg.event;
+		LOG_DBG("Received event = %d, current state = %d", msg.event, strm_state);
 
-		LOG_DBG("Received event = %d, current state = %d", event, strm_state);
-
-		switch (event) {
+		switch (msg.event) {
 		case LE_AUDIO_EVT_STREAMING:
 			LOG_DBG("LE audio evt streaming");
 
@@ -198,7 +196,7 @@ static void le_audio_msg_sub_thread(void)
 			break;
 
 		default:
-			LOG_WRN("Unexpected/unhandled le_audio event: %d", event);
+			LOG_WRN("Unexpected/unhandled le_audio event: %d", msg.event);
 
 			break;
 		}
@@ -248,7 +246,7 @@ static int zbus_subscribers_create(void)
 /**
  * @brief	Zbus listener to receive events from bt_mgmt.
  *
- * @param[in] chan	Zbus channel.
+ * @param[in]	chan	Zbus channel.
  *
  * @note	Will in most cases be called from BT_RX context,
  *		so there should not be too much processing done here.
@@ -259,16 +257,21 @@ static void bt_mgmt_evt_handler(const struct zbus_channel *chan)
 	const struct bt_mgmt_msg *msg;
 
 	msg = zbus_chan_const_msg(chan);
-	uint8_t event = msg->event;
 
-	if (event == BT_MGMT_EXT_ADV_READY) {
+	switch (msg->event) {
+	case BT_MGMT_EXT_ADV_READY:
 		LOG_INF("Ext adv ready");
+
 		ret = broadcast_source_start(msg->ext_adv);
 		if (ret) {
 			LOG_ERR("Failed to start broadcaster: %d", ret);
 		}
-	} else {
-		LOG_WRN("Unexpected/unhandled bt_mgmt event: %d", event);
+
+		break;
+
+	default:
+		LOG_WRN("Unexpected/unhandled bt_mgmt event: %d", msg->event);
+		break;
 	}
 }
 

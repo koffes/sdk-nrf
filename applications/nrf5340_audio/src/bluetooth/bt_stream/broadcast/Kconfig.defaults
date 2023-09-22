@@ -4,7 +4,50 @@
 # SPDX-License-Identifier: LicenseRef-Nordic-5-Clause
 #
 
-if AUDIO_DEV = 2 && TRANSPORT_BIS
+config BT_BUF_ACL_RX_SIZE
+	default 502 if (AUDIO_DFU > 0)
+
+# HEADSET
+if AUDIO_DEV = 1
+
+config BT_OBSERVER
+	default y
+
+config BT_PERIPHERAL
+	default y
+
+config BT_DEVICE_APPEARANCE
+	# Generic Audio Sink - 0x0840
+	default 2112
+
+config BT_ISO_SYNC_RECEIVER
+	default y
+
+config BT_BAP_BROADCAST_SINK
+	default y
+
+config BT_BAP_SCAN_DELEGATOR
+	default y
+
+config BT_BAP_BROADCAST_SNK_STREAM_COUNT
+	default 2
+
+config BT_ISO_MAX_CHAN
+	default 2
+
+config BT_SMP
+	default y
+
+config BT_PAC_SNK
+	default y
+
+config BT_AUDIO_RX
+	default y
+
+endif # AUDIO_DEV = 1 (HEADSET)
+
+# GATEWAY
+if AUDIO_DEV = 2
 
 config BT_CAP_INITIATOR
 	default y
@@ -34,4 +77,4 @@ config BT_ISO_MAX_CHAN
 config BT_AUDIO_TX
 	default y
 
-endif # AUDIO_DEV = 2 (GATEWAY) && TRANSPORT_BIS
+endif # AUDIO_DEV = 2 (GATEWAY)
