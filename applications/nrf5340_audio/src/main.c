@@ -5,7 +5,6 @@
  */
 
 #include <zephyr/kernel.h>
-#include <zephyr/debug/stack.h>
 #include <zephyr/device.h>
 #include <zephyr/bluetooth/bluetooth.h>
 #include <zephyr/zbus/zbus.h>

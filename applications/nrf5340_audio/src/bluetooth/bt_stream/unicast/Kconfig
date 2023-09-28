@@ -122,6 +122,9 @@ module = UNICAST_SERVER
 module-str = unicast_server
 source "subsys/logging/Kconfig.template.log_config"
 
-endmenu # Log levels
+module = UNICAST_CLIENT
+module-str = unicast_client
+source "subsys/logging/Kconfig.template.log_config"
 
+endmenu # Log levels
 endmenu # Unicast

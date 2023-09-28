@@ -7,14 +7,15 @@
 #include "broadcast_source.h"
 
 #include <zephyr/zbus/zbus.h>
+#include <zephyr/sys/byteorder.h>
 #include <zephyr/bluetooth/bluetooth.h>
 #include <zephyr/bluetooth/audio/audio.h>
 #include <zephyr/bluetooth/audio/cap.h>
+#include <../subsys/bluetooth/audio/bap_iso.h>
 #include <zephyr/bluetooth/audio/bap_lc3_preset.h>
+
 /* TODO: Remove when a get_info function is implemented in host */
 #include <../subsys/bluetooth/audio/bap_endpoint.h>
-#include <../subsys/bluetooth/audio/bap_iso.h>
-#include <zephyr/sys/byteorder.h>
 
 #include "macros_common.h"
 #include "le_audio.h"

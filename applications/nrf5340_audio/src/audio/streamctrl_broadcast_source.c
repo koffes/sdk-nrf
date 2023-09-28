@@ -7,7 +7,6 @@
 #include "streamctrl.h"
 
 #include <zephyr/kernel.h>
-#include <zephyr/debug/stack.h>
 #include <zephyr/zbus/zbus.h>
 
 #include "nrf5340_audio_common.h"

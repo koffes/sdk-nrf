@@ -76,7 +76,7 @@ struct volume_msg {
 };
 
 enum content_control_evt_type {
-	MEDIA_PLAY = 1,
+	MEDIA_START = 1,
 	MEDIA_STOP,
 };
 

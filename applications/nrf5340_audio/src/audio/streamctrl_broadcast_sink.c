@@ -7,7 +7,6 @@
 #include "streamctrl.h"
 
 #include <zephyr/kernel.h>
-#include <zephyr/debug/stack.h>
 #include <zephyr/zbus/zbus.h>
 
 #include "nrf5340_audio_common.h"
@@ -64,11 +63,15 @@ struct rx_stats {
 	uint32_t data_size_mismatch_cnt;
 };
 
-/* Callback for handling BLE RX */
+/* Callback for handling ISO RX */
 static void le_audio_rx_data_handler(uint8_t const *const p_data, size_t data_size, bool bad_frame,
 				     uint32_t sdu_ref, enum audio_channel channel_index,
 				     size_t desired_data_size)
 {
+	int ret;
+	uint32_t blocks_alloced_num, blocks_locked_num;
+	struct ble_iso_data *iso_received = NULL;
+
 	/* Capture timestamp of when audio frame is received */
 	uint32_t recv_frame_ts = nrfx_timer_capture(&audio_sync_timer_instance,
 						    AUDIO_SYNC_TIMER_CURR_TIME_CAPTURE_CHANNEL);
@@ -108,11 +111,6 @@ static void le_audio_rx_data_handler(uint8_t const *const p_data, size_t data_si
 		return;
 	}
 
-	int ret;
-	struct ble_iso_data *iso_received = NULL;
-
-	uint32_t blocks_alloced_num, blocks_locked_num;
-
 	ret = data_fifo_num_used_get(&ble_fifo_rx, &blocks_alloced_num, &blocks_locked_num);
 	ERR_CHK(ret);
 
@@ -151,7 +149,9 @@ static void le_audio_rx_data_handler(uint8_t const *const p_data, size_t data_si
 	ERR_CHK_MSG(ret, "Failed to lock block");
 }
 
-/* Thread to receive data from BLE through a k_fifo and send to audio datapath */
+/**
+ * @brief	Receive data from BLE through a k_fifo and send to audio datapath.
+ */
 static void audio_datapath_thread(void *dummy1, void *dummy2, void *dummy3)
 {
 	int ret;
@@ -251,7 +251,7 @@ static void button_msg_sub_thread(void)
 			if (IS_ENABLED(CONFIG_AUDIO_MUTE)) {
 				ret = bt_rend_volume_mute(false);
 				if (ret) {
-					LOG_WRN("Failed to mute volume");
+					LOG_WRN("Failed to mute, ret: %d", ret);
 				}
 
 				break;
@@ -520,7 +520,7 @@ static int audio_datapath_thread_create(void)
 		&audio_datapath_thread_data, audio_datapath_thread_stack,
 		CONFIG_AUDIO_DATAPATH_STACK_SIZE, (k_thread_entry_t)audio_datapath_thread, NULL,
 		NULL, NULL, K_PRIO_PREEMPT(CONFIG_AUDIO_DATAPATH_THREAD_PRIO), 0, K_NO_WAIT);
-	ret = k_thread_name_set(audio_datapath_thread_id, "AUDIO DATAPATH");
+	ret = k_thread_name_set(audio_datapath_thread_id, "AUDIO_DATAPATH");
 	if (ret) {
 		LOG_ERR("Failed to create audio_datapath thread");
 		return ret;

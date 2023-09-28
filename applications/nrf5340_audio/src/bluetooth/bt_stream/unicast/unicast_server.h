@@ -71,7 +71,6 @@ int unicast_server_send(struct encoded_audio enc_audio);
  *
  * @return	0 for success, error otherwise.
  */
-
 int unicast_server_disable(void);
 
 /**
