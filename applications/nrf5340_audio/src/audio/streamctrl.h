@@ -10,14 +10,14 @@
 #include <stddef.h>
 #include <zephyr/kernel.h>
 
-/* State machine states for peer/stream */
+/* State machine states for peer or stream. */
 enum stream_state {
 	STATE_STREAMING,
 	STATE_PAUSED,
 };
 
 /**
- * @brief Get current streaming state.
+ * @brief Get the current streaming state.
  *
  * @return      strm_state enum value.
  */
@@ -33,7 +33,7 @@ uint8_t stream_state_get(void);
 void streamctrl_send(void const *const data, size_t size, uint8_t num_ch);
 
 /**
- * @brief Init internal functionality and start streamctrl.
+ * @brief Initialize the internal functionality and start streamctrl.
  *
  * @return 0 if successful.
  */

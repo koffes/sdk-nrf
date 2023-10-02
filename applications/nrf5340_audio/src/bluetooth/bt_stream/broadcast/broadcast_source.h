@@ -23,7 +23,7 @@ void broadcast_source_adv_get(const struct bt_data **ext_adv, size_t *ext_adv_si
 /**
  * @brief	Start the Bluetooth LE Audio broadcast (BIS) source.
  *
- * @param[in]	ext_adv		Pointer to the extended advertising set, can be NULL if a stream
+ * @param[in]	ext_adv		Pointer to the extended advertising set; can be NULL if a stream
  *				is restarted.
  *
  * @return	0 for success, error otherwise.

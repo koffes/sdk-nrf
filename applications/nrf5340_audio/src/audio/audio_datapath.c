@@ -301,14 +301,14 @@ static void pres_comp_state_set(enum pres_comp_state new_state)
 }
 
 /**
- * @brief Move audio blocks back and forth in FIFO to get audio in sync
+ * @brief Move audio blocks back and forth in FIFO to get audio in sync.
  *
- * @note The audio sync is based on sdu_ref_us
+ * @note The audio sync is based on sdu_ref_us.
  *
- * @param recv_frame_ts_us Timestamp of when frame was received
- * @param sdu_ref_us ISO timestamp reference from BLE controller
- * @param sdu_ref_not_consecutive True if sdu_ref_us and previous sdu_ref_us
- *				  origins from non-consecutive frames
+ * @param recv_frame_ts_us Timestamp of when frame was received.
+ * @param sdu_ref_us ISO timestamp reference from Bluetooth LE controller.
+ * @param sdu_ref_not_consecutive True if sdu_ref_us and the previous sdu_ref_us
+ *				  originate from non-consecutive frames.
  */
 static void audio_datapath_presentation_compensation(uint32_t recv_frame_ts_us, uint32_t sdu_ref_us,
 						     bool sdu_ref_not_consecutive)
@@ -320,7 +320,7 @@ static void audio_datapath_presentation_compensation(uint32_t recv_frame_ts_us, 
 	}
 
 	/* Move presentation compensation into PRES_STATE_WAIT if sdu_ref_us and
-	 * previous sdu_ref_us origins from non-consecutive frames
+	 * the previous sdu_ref_us originate from non-consecutive frames.
 	 */
 	if (sdu_ref_not_consecutive) {
 		pres_comp_state_set(PRES_STATE_WAIT);
@@ -366,7 +366,7 @@ static void audio_datapath_presentation_compensation(uint32_t recv_frame_ts_us, 
 	case PRES_STATE_LOCKED: {
 		/*
 		 * Presentation delay compensation moves into PRES_STATE_WAIT if sdu_ref_us
-		 * and previous sdu_ref_us origins from non-consecutive frames, or into
+		 * and the previous sdu_ref_us originate from non-consecutive frames, or into
 		 * PRES_STATE_INIT if drift compensation unlocks.
 		 */
 
@@ -719,7 +719,7 @@ static void audio_datapath_i2s_stop(void)
 }
 
 /**
- * @brief Adjust timing to make sure audio data is sent just in time for BLE event
+ * @brief Adjust timing to make sure audio data is sent just in time for Bluetooth LE event.
  *
  * @note  The time from last anchor point is checked and then blocks of 1ms
  *        can be dropped to allow the sending of encoded data to be sent just
@@ -757,9 +757,9 @@ static void audio_datapath_just_in_time_check_and_adjust(uint32_t sdu_ref_us)
  * @brief Update sdu_ref_us so that drift compensation can work correctly.
  *
  * @note This function is only valid for gateway using I2S as audio source
- *       and unidirectional audio stream (gateway to headset(s)).
+ *       and unidirectional audio stream (gateway to one or more headsets).
  *
- * @param sdu_ref_us    ISO timestamp reference from BLE controller.
+ * @param sdu_ref_us    ISO timestamp reference from Bluetooth LE controller.
  * @param adjust        Indicate if the sdu_ref should be used to adjust timing.
  */
 static void audio_datapath_sdu_ref_update(const struct zbus_channel *chan)

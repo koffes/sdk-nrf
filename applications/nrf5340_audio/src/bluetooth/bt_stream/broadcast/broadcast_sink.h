@@ -10,7 +10,8 @@
 #include "le_audio.h"
 
 /**
- * @brief	Change active audio stream if the BIG contains more than one BIS.
+ * @brief	Change the active audio stream if the broadcast isochronous group (BIG) contains
+ *              more than one broadcast isochronous stream (BIS).
  *
  * @note	Only streams within the same broadcast source are relevant, meaning
  *		that the broadcast source is not changed.
@@ -21,7 +22,7 @@
 int broadcast_sink_change_active_audio_stream(void);
 
 /**
- * @brief	Get configuration for audio stream.
+ * @brief	Get configuration for the audio stream.
  *
  * @param[out]	bitrate		Pointer to the bitrate used; can be NULL.
  * @param[out]	sampling_rate	Pointer to the sampling rate used; can be NULL.

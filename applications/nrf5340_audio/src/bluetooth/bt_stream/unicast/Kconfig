@@ -14,7 +14,7 @@ choice BT_BAP_UNICAST_BAP_CONFIGURATION
 	default BT_BAP_UNICAST_CONFIGURABLE
 	help
 	  Select the unicast codec configuration as given in
-	  Table 5.2 of BAP Specification.
+	  Table 5.2 of the Bluetooth Audio Profile Specification.
 	  USB only supports 48 kHz samplig rate.
 
 config BT_BAP_UNICAST_CONFIGURABLE
@@ -27,14 +27,14 @@ config BT_BAP_UNICAST_16_2_1
 	bool "16_2_1"
 	depends on TRANSPORT_CIS
 	help
-	  Unicast mandatory codec capability 16_2_1
+	  Unicast mandatory codec capability 16_2_1.
 	  16kHz, 32kbps, 2 retransmits, 10ms transport latency, and 40ms presentation delay.
 
 config BT_BAP_UNICAST_24_2_1
 	bool "24_2_1"
 	depends on TRANSPORT_CIS
 	help
-	  Unicast codec capability 24_2_1
+	  Unicast codec capability 24_2_1.
 	  24kHz, 48kbps, 2 retransmits, 10ms transport latency, and 40ms presentation delay.
 endchoice
 
@@ -65,11 +65,11 @@ config BT_AUDIO_PRES_DELAY_SRCH_PREF_MAX
 	  Search for the smallest maximum preferred delay over all audio receivers.
 
 config BT_AUDIO_PRES_DELAY_SRCH_SOURCE
-	bool "Use the audio source/client defined presentation delay"
+	bool "Use the presentation delay of audio source or client"
 	help
-	  Use the audio source/client defined presentation delay if within
-	  AUDIO_MIN_PRES_DLY_US and AUDIO_MAX_PRES_DLY_US range. This will
-	  override the audio receivers presentation delay as long as it is in range of
+	  Use the presentation delay defined by the broadcast_source or unicast_client if it
+	  is within the range set by AUDIO_MIN_PRES_DLY_US and AUDIO_MAX_PRES_DLY_US. This will
+	  override the audio receiver presentation delay as long as it is in range of
 	  the max and min supported by the audio receivers. If it is outside this range,
 	  then it will revert to the closest supported value.
 endchoice

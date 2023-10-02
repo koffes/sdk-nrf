@@ -76,7 +76,7 @@ int unicast_client_start(void);
 int unicast_client_stop(void);
 
 /**
- * @brief	Send encoded audio using Bluetooth LE Audio unicast.
+ * @brief	Send encoded audio using the Bluetooth LE Audio unicast.
  *
  * @param[in]	enc_audio	Encoded audio struct.
  *
