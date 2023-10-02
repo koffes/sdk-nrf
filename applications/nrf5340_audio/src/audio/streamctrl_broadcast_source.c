@@ -47,40 +47,6 @@ static void stream_state_set(enum stream_state stream_state_new)
 	strm_state = stream_state_new;
 }
 
-#define TEST_TONE_BASE_FREQ_HZ 1000
-
-static int test_tone_start(void)
-{
-	int ret;
-	static uint32_t test_tone_hz;
-
-	if (CONFIG_AUDIO_BIT_DEPTH_BITS != 16) {
-		LOG_WRN("Tone gen only supports 16 bits");
-		return -ECANCELED;
-	}
-
-	if (strm_state == STATE_STREAMING) {
-		if (test_tone_hz == 0) {
-			test_tone_hz = TEST_TONE_BASE_FREQ_HZ;
-		} else if (test_tone_hz >= TEST_TONE_BASE_FREQ_HZ * 4) {
-			test_tone_hz = 0;
-		} else {
-			test_tone_hz = test_tone_hz * 2;
-		}
-
-		if (test_tone_hz != 0) {
-			LOG_INF("Test tone set at %d Hz", test_tone_hz);
-		} else {
-			LOG_INF("Test tone off");
-		}
-
-		ret = audio_encode_test_tone_set(test_tone_hz);
-		ERR_CHK_MSG(ret, "Failed to generate test tone");
-	}
-
-	return 0;
-}
-
 /**
  * @brief	Handle button activity.
  */
@@ -126,7 +92,12 @@ static void button_msg_sub_thread(void)
 
 		case BUTTON_4:
 			if (IS_ENABLED(CONFIG_AUDIO_TEST_TONE)) {
-				ret = test_tone_start();
+				if (strm_state != STATE_STREAMING) {
+					LOG_WRN("Not in streaming state");
+					break;
+				}
+
+				ret = audio_system_encode_test_tone_step();
 				if (ret) {
 					LOG_WRN("Failed to play test tone, ret: %d", ret);
 				}

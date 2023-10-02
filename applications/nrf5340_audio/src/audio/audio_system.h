@@ -18,10 +18,20 @@
  *
  * @note A stream must already be running to use this feature.
  *
- * @retval   -ENOMEM  The frequency is too low (buffer overflow).
- * @retval   0        Success.
+ * @return -ENOMEM	The frequency is too low (buffer overflow).
+ * @return 0		Success.
  */
-int audio_encode_test_tone_set(uint32_t freq);
+int audio_system_encode_test_tone_set(uint32_t freq);
+
+/**
+ * @brief Step through different test tones.
+ *
+ * @note A stream must already be running to use this feature.
+ * Will step through test tones: 1 kHz, 2 kHz, 4 kHz and off.
+ *
+ * @return 0 on success, error otherwise.
+ */
+int audio_system_encode_test_tone_step(void);
 
 /**
  * @brief Decode data and then add it to TX FIFO buffer.
@@ -32,7 +42,7 @@ int audio_encode_test_tone_set(uint32_t freq);
  *
  * @return 0 on success, error otherwise.
  */
-int audio_decode(void const *const encoded_data, size_t encoded_data_size, bool bad_frame);
+int audio_system_decode(void const *const encoded_data, size_t encoded_data_size, bool bad_frame);
 
 /**
  * @brief Initialize and start both HW and SW audio codec.

@@ -27,7 +27,8 @@ LOG_MODULE_REGISTER(audio_system, CONFIG_AUDIO_SYSTEM_LOG_LEVEL);
 #define FIFO_TX_BLOCK_COUNT (CONFIG_FIFO_FRAME_SPLIT_NUM * CONFIG_FIFO_TX_FRAME_COUNT)
 #define FIFO_RX_BLOCK_COUNT (CONFIG_FIFO_FRAME_SPLIT_NUM * CONFIG_FIFO_RX_FRAME_COUNT)
 
-#define DEBUG_INTERVAL_NUM 1000
+#define DEBUG_INTERVAL_NUM     1000
+#define TEST_TONE_BASE_FREQ_HZ 1000
 
 K_THREAD_STACK_DEFINE(encoder_thread_stack, CONFIG_ENCODER_STACK_SIZE);
 
@@ -168,7 +169,7 @@ static void encoder_thread(void *arg1, void *arg2, void *arg3)
 	}
 }
 
-int audio_encode_test_tone_set(uint32_t freq)
+int audio_system_encode_test_tone_set(uint32_t freq)
 {
 	int ret;
 
@@ -187,8 +188,41 @@ int audio_encode_test_tone_set(uint32_t freq)
 	return 0;
 }
 
+int audio_system_encode_test_tone_step(void)
+{
+	int ret;
+	static uint32_t test_tone_hz;
+
+	if (CONFIG_AUDIO_BIT_DEPTH_BITS != 16) {
+		LOG_WRN("Tone gen only supports 16 bits");
+		return -ECANCELED;
+	}
+
+	if (test_tone_hz == 0) {
+		test_tone_hz = TEST_TONE_BASE_FREQ_HZ;
+	} else if (test_tone_hz >= TEST_TONE_BASE_FREQ_HZ * 4) {
+		test_tone_hz = 0;
+	} else {
+		test_tone_hz = test_tone_hz * 2;
+	}
+
+	if (test_tone_hz != 0) {
+		LOG_INF("Test tone set at %d Hz", test_tone_hz);
+	} else {
+		LOG_INF("Test tone off");
+	}
+
+	ret = audio_system_encode_test_tone_set(test_tone_hz);
+	if (ret) {
+		LOG_ERR("Failed to generate test tone");
+		return ret;
+	}
+
+	return 0;
+}
+
 /* This function is only used on gateway using USB as audio source and bidirectional stream */
-int audio_decode(void const *const encoded_data, size_t encoded_data_size, bool bad_frame)
+int audio_system_decode(void const *const encoded_data, size_t encoded_data_size, bool bad_frame)
 {
 	int ret;
 	uint32_t blocks_alloced_num;
