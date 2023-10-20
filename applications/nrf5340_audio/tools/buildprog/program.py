@@ -8,6 +8,7 @@
 
 from threading import Thread
 from os import system
+import os
 from typing import List
 from nrf5340_audio_dk_devices import DeviceConf, SelectFlags, AudioDevice
 
@@ -54,18 +55,17 @@ def _program_cores(dev: DeviceConf, mcuboot_type) -> int:
         ret_val = system(cmd)
         if ret_val != 0:
             if not dev.recover_on_fail:
-                dev.core_app_programmed =  SelectFlags.FAIL
+                dev.core_app_programmed = SelectFlags.FAIL
             return ret_val
         else:
             dev.core_app_programmed = SelectFlags.DONE
-
         # Populate UICR data matching the JSON file
         if not __populate_UICR(dev):
             dev.core_app_programmed = SelectFlags.FAIL
             return 1
 
     if dev.core_net_programmed != SelectFlags.NOT or dev.core_app_programmed != SelectFlags.NOT:
-        if mcuboot_type =='external':
+        if mcuboot_type == 'external':
             print(f"Hard resetting {dev}")
             cmd = f"nrfjprog -p --snr {dev.nrf5340_audio_dk_snr}"
         else:
