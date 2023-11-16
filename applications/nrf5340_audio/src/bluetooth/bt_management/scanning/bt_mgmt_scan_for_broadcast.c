@@ -50,15 +50,54 @@ struct broadcast_source {
 	uint32_t broadcast_id;
 };
 
+static void broadcast_blink_timer_on_handler(struct k_timer *dummy);
+K_TIMER_DEFINE(broadcast_blink_timer_on, broadcast_blink_timer_on_handler, NULL);
+
+static void broadcast_blink_timer_on_handler(struct k_timer *dummy)
+{
+	static uint32_t counter;
+
+	if ((counter % 2) == 0) {
+		(void)gpio_pin_configure_dt(&center_led_b, GPIO_OUTPUT_ACTIVE);
+	} else {
+		(void)gpio_pin_configure_dt(&center_led_b, GPIO_OUTPUT_INACTIVE);
+	}
+	counter++;
+	if (counter > (num_broadcasters * 2) - 1) {
+		k_timer_stop(&broadcast_blink_timer_on);
+		counter = 0;
+		(void)gpio_pin_configure_dt(&center_led_b, GPIO_OUTPUT_INACTIVE);
+		return;
+	}
+}
+
+static void broadcast_blink_timer_off_handler(struct k_timer *dummy)
+{
+	(void)gpio_pin_configure_dt(&center_led_b, GPIO_OUTPUT_INACTIVE);
+	if (num_broadcasters) {
+		k_timer_start(&broadcast_blink_timer_on, K_MSEC(0),
+			      K_MSEC(250 / (num_broadcasters * 2)));
+	}
+}
+
+K_TIMER_DEFINE(broadcast_blink_timer_off, broadcast_blink_timer_off_handler, NULL);
+
 static void broadcast_scan_timer_handler(struct k_timer *dummy)
 {
+	bool any_broadcaster = (bool)num_broadcasters;
+	static bool old_state;
+
 	LOG_WRN("timer timed out. Num broadcasters %d", num_broadcasters);
 
 	if (num_broadcasters) {
 		(void)gpio_pin_configure_dt(&center_led_g, GPIO_OUTPUT_ACTIVE);
+		k_timer_start(&broadcast_blink_timer_off, K_MSEC(750), K_MSEC(0));
 	} else {
 		(void)gpio_pin_configure_dt(&center_led_g, GPIO_OUTPUT_INACTIVE);
+		(void)gpio_pin_configure_dt(&center_led_b, GPIO_OUTPUT_INACTIVE);
 	}
+
+	old_state = any_broadcaster;
 	num_broadcasters = 0;
 };
 
