@@ -12,10 +12,12 @@
 #include <zephyr/bluetooth/uuid.h>
 #include <zephyr/bluetooth/audio/audio.h>
 #include <zephyr/sys/byteorder.h>
+#include <zephyr/drivers/gpio.h>
 
 #include "bt_mgmt.h"
 #include "macros_common.h"
 #include "nrf5340_audio_common.h"
+#include "led.h"
 
 #include <zephyr/logging/log.h>
 LOG_MODULE_DECLARE(bt_mgmt_scan);
@@ -37,10 +39,30 @@ static char const *srch_name;
 static struct bt_le_per_adv_sync *pa_sync;
 static uint32_t broadcaster_broadcast_id;
 
+static uint8_t num_broadcasters;
+
+static const struct gpio_dt_spec center_led_r = GPIO_DT_SPEC_GET(DT_NODELABEL(rgb1_red), gpios);
+static const struct gpio_dt_spec center_led_g = GPIO_DT_SPEC_GET(DT_NODELABEL(rgb1_green), gpios);
+static const struct gpio_dt_spec center_led_b = GPIO_DT_SPEC_GET(DT_NODELABEL(rgb1_blue), gpios);
+
 struct broadcast_source {
 	char name[BLE_SEARCH_NAME_MAX_LEN];
 	uint32_t broadcast_id;
 };
+
+static void broadcast_scan_timer_handler(struct k_timer *dummy)
+{
+	LOG_WRN("timer timed out. Num broadcasters %d", num_broadcasters);
+
+	if (num_broadcasters) {
+		(void)gpio_pin_configure_dt(&center_led_g, GPIO_OUTPUT_ACTIVE);
+	} else {
+		(void)gpio_pin_configure_dt(&center_led_g, GPIO_OUTPUT_INACTIVE);
+	}
+	num_broadcasters = 0;
+};
+
+K_TIMER_DEFINE(broadcast_scan_timer, broadcast_scan_timer_handler, NULL);
 
 static void scan_restart_worker(struct k_work *work)
 {
@@ -134,6 +156,8 @@ static bool scan_check_broadcast_source(struct bt_data *data, void *user_data)
 		/* Ensure that broadcast name is at least one character shorter than the value of
 		 * BLE_SEARCH_NAME_MAX_LEN
 		 */
+		num_broadcasters++;
+
 		if (data->data_len < BLE_SEARCH_NAME_MAX_LEN) {
 			memcpy(source->name, data->data, data->data_len);
 			source->name[data->data_len] = '\0';
@@ -178,6 +202,7 @@ static void scan_recv_cb(const struct bt_le_scan_recv_info *info, struct net_buf
 		return;
 	}
 
+	num_broadcasters = 0;
 	bt_data_parse(ad, scan_check_broadcast_source, (void *)&source);
 
 	if (source.broadcast_id != INVALID_BROADCAST_ID) {
@@ -263,6 +288,8 @@ int bt_mgmt_scan_for_broadcast_start(struct bt_le_scan_param *scan_param, char c
 	if (ret) {
 		return ret;
 	}
+
+	k_timer_start(&broadcast_scan_timer, K_MSEC(1000), K_MSEC(1000));
 
 	return 0;
 }

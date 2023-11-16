@@ -62,15 +62,6 @@ static int leds_set(void)
 
 	channel_assignment_get(&channel);
 
-	if (channel == AUDIO_CH_L) {
-		ret = led_on(LED_APP_RGB, LED_COLOR_BLUE);
-	} else {
-		ret = led_on(LED_APP_RGB, LED_COLOR_MAGENTA);
-	}
-
-	if (ret) {
-		return ret;
-	}
 #elif (CONFIG_AUDIO_DEV == GATEWAY)
 	ret = led_on(LED_APP_RGB, LED_COLOR_GREEN);
 	if (ret) {
