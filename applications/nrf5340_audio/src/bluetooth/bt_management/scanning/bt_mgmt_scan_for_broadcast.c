@@ -13,6 +13,7 @@
 #include <zephyr/bluetooth/audio/audio.h>
 #include <zephyr/sys/byteorder.h>
 #include <zephyr/drivers/gpio.h>
+#include <zephyr/sys/slist.h>
 
 #include "bt_mgmt.h"
 #include "macros_common.h"
@@ -41,7 +42,6 @@ static uint32_t broadcaster_broadcast_id;
 
 static uint8_t num_broadcasters;
 
-static const struct gpio_dt_spec center_led_r = GPIO_DT_SPEC_GET(DT_NODELABEL(rgb1_red), gpios);
 static const struct gpio_dt_spec center_led_g = GPIO_DT_SPEC_GET(DT_NODELABEL(rgb1_green), gpios);
 static const struct gpio_dt_spec center_led_b = GPIO_DT_SPEC_GET(DT_NODELABEL(rgb1_blue), gpios);
 
@@ -51,7 +51,24 @@ struct broadcast_source {
 };
 
 static void broadcast_blink_timer_on_handler(struct k_timer *dummy);
+
 K_TIMER_DEFINE(broadcast_blink_timer_on, broadcast_blink_timer_on_handler, NULL);
+
+#define NAME_SIZE_MAX	 250
+#define BROADCASTERS_MAX 10
+#define TIMEOUT_MS	 1000
+
+struct name_timeout_pair {
+	sys_snode_t node;
+	char name[NAME_SIZE_MAX];
+	uint32_t last_seen;
+};
+
+static struct name_timeout_pair n_t_pair[BROADCASTERS_MAX];
+
+static sys_slist_t avail_list;
+static sys_slist_t filled_list;
+static K_MUTEX_DEFINE(module_list_lock);
 
 static void broadcast_blink_timer_on_handler(struct k_timer *dummy)
 {
@@ -84,11 +101,26 @@ K_TIMER_DEFINE(broadcast_blink_timer_off, broadcast_blink_timer_off_handler, NUL
 
 static void broadcast_scan_timer_handler(struct k_timer *dummy)
 {
-	bool any_broadcaster = (bool)num_broadcasters;
-	static bool old_state;
+	static struct name_timeout_pair *n_t_pair;
+	sys_snode_t *node;
 
-	LOG_WRN("timer timed out. Num broadcasters %d", num_broadcasters);
+	num_broadcasters = 0;
 
+	SYS_SLIST_FOR_EACH_NODE(&filled_list, node) {
+		n_t_pair = CONTAINER_OF(node, struct name_timeout_pair, node);
+		if (k_uptime_get() - n_t_pair->last_seen > TIMEOUT_MS) {
+			LOG_WRN("%s timed out", n_t_pair->name);
+			bool removed = sys_slist_find_and_remove(&filled_list, node);
+
+			__ASSERT(removed, "Item was not removed!");
+		}
+
+		LOG_WRN("have: %s. Last seen: %lld ms ago", n_t_pair->name,
+			k_uptime_get() - n_t_pair->last_seen);
+		num_broadcasters++;
+	}
+
+	LOG_WRN("Num active broadcasters %d", num_broadcasters);
 	if (num_broadcasters) {
 		(void)gpio_pin_configure_dt(&center_led_g, GPIO_OUTPUT_ACTIVE);
 		k_timer_start(&broadcast_blink_timer_off, K_MSEC(750), K_MSEC(0));
@@ -96,10 +128,37 @@ static void broadcast_scan_timer_handler(struct k_timer *dummy)
 		(void)gpio_pin_configure_dt(&center_led_g, GPIO_OUTPUT_INACTIVE);
 		(void)gpio_pin_configure_dt(&center_led_b, GPIO_OUTPUT_INACTIVE);
 	}
-
-	old_state = any_broadcaster;
-	num_broadcasters = 0;
 };
+
+/* Shall be called for each found broadcaster */
+int name_add(char *name, uint8_t name_size)
+{
+	uint64_t time_now = k_uptime_get();
+	static struct name_timeout_pair *n_t_pair;
+	sys_snode_t *node;
+
+	SYS_SLIST_FOR_EACH_NODE(&filled_list, node) {
+		n_t_pair = CONTAINER_OF(node, struct name_timeout_pair, node);
+		if (strcmp(n_t_pair->name, name) == 0) {
+			n_t_pair->last_seen = time_now;
+			return 0;
+		}
+	}
+	/* Add a new node */
+	node = sys_slist_get(&avail_list);
+	if (!node) {
+		LOG_ERR("Not enough memory to store"
+			" incoming data!");
+		return 0;
+	}
+	n_t_pair = CONTAINER_OF(node, struct name_timeout_pair, node);
+	memcpy(n_t_pair->name, name, name_size);
+	n_t_pair->last_seen = time_now;
+	sys_slist_append(&filled_list, &n_t_pair->node);
+	LOG_WRN("Added new node");
+
+	return 0;
+}
 
 K_TIMER_DEFINE(broadcast_scan_timer, broadcast_scan_timer_handler, NULL);
 
@@ -195,13 +254,13 @@ static bool scan_check_broadcast_source(struct bt_data *data, void *user_data)
 		/* Ensure that broadcast name is at least one character shorter than the value of
 		 * BLE_SEARCH_NAME_MAX_LEN
 		 */
-		num_broadcasters++;
 
 		if (data->data_len < BLE_SEARCH_NAME_MAX_LEN) {
 			memcpy(source->name, data->data, data->data_len);
 			source->name[data->data_len] = '\0';
 		}
 
+		name_add(source->name, data->data_len);
 		return true;
 	}
 
@@ -241,16 +300,7 @@ static void scan_recv_cb(const struct bt_le_scan_recv_info *info, struct net_buf
 		return;
 	}
 
-	num_broadcasters = 0;
 	bt_data_parse(ad, scan_check_broadcast_source, (void *)&source);
-
-	if (source.broadcast_id != INVALID_BROADCAST_ID) {
-		if (strncmp(source.name, srch_name, BLE_SEARCH_NAME_MAX_LEN) == 0) {
-			LOG_INF("Broadcast source %s found, id: 0x%06x", source.name,
-				source.broadcast_id);
-			periodic_adv_sync(info, source.broadcast_id);
-		}
-	}
 }
 
 static void pa_synced_cb(struct bt_le_per_adv_sync *sync,
@@ -299,6 +349,13 @@ static struct bt_le_per_adv_sync_cb sync_callbacks = {
 int bt_mgmt_scan_for_broadcast_start(struct bt_le_scan_param *scan_param, char const *const name)
 {
 	int ret;
+
+	sys_slist_init(&avail_list);
+	sys_slist_init(&filled_list);
+
+	for (int i = 0; i < BROADCASTERS_MAX; ++i) {
+		sys_slist_append(&avail_list, &n_t_pair[i].node);
+	}
 
 	if (!sync_cb_registered) {
 		bt_le_per_adv_sync_cb_register(&sync_callbacks);
