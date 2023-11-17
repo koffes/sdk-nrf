@@ -59,6 +59,8 @@ K_TIMER_DEFINE(broadcast_blink_timer_on, broadcast_blink_timer_on_handler, NULL)
 #define NAME_SIZE_MAX	 250
 #define BROADCASTERS_MAX 10
 #define TIMEOUT_MS	 1000
+static lv_obj_t *header_label;
+static lv_obj_t *list_label[BROADCASTERS_MAX];
 
 struct name_timeout_pair {
 	sys_snode_t node;
@@ -101,12 +103,19 @@ static void broadcast_blink_timer_off_handler(struct k_timer *dummy)
 
 K_TIMER_DEFINE(broadcast_blink_timer_off, broadcast_blink_timer_off_handler, NULL);
 
-static void broadcast_scan_timer_handler(struct k_timer *dummy)
+static void timer_worker(struct k_work *work)
 {
 	static struct name_timeout_pair *n_t_pair;
 	sys_snode_t *node;
+	char header_buf[70] = {'\0'};
 
 	num_broadcasters = 0;
+	sprintf(header_buf, "Scanning %d", k_uptime_get());
+	lv_label_set_text(header_label, header_buf);
+
+	for (int i = 0; i < BROADCASTERS_MAX; i++) {
+		lv_label_set_text(list_label[i], "---");
+	}
 
 	SYS_SLIST_FOR_EACH_NODE(&filled_list, node) {
 		n_t_pair = CONTAINER_OF(node, struct name_timeout_pair, node);
@@ -119,6 +128,9 @@ static void broadcast_scan_timer_handler(struct k_timer *dummy)
 
 		LOG_WRN("have: %s. Last seen: %lld ms ago", n_t_pair->name,
 			k_uptime_get() - n_t_pair->last_seen);
+
+		lv_label_set_text(list_label[num_broadcasters], n_t_pair->name);
+
 		num_broadcasters++;
 	}
 
@@ -130,6 +142,15 @@ static void broadcast_scan_timer_handler(struct k_timer *dummy)
 		(void)gpio_pin_configure_dt(&center_led_g, GPIO_OUTPUT_INACTIVE);
 		(void)gpio_pin_configure_dt(&center_led_b, GPIO_OUTPUT_INACTIVE);
 	}
+
+	lv_task_handler();
+}
+
+K_WORK_DEFINE(timer_work, timer_worker);
+
+static void broadcast_scan_timer_handler(struct k_timer *dummy)
+{
+	k_work_submit(&timer_work);
 };
 
 /* Shall be called for each found broadcaster */
@@ -354,8 +375,6 @@ static int display_init(void)
 	uint32_t count = 23;
 	char count_str[11] = {0};
 	const struct device *display_dev;
-	lv_obj_t *hello_world_label;
-	lv_obj_t *count_label;
 
 	display_dev = DEVICE_DT_GET(DT_CHOSEN(zephyr_display));
 	if (!device_is_ready(display_dev)) {
@@ -363,34 +382,21 @@ static int display_init(void)
 		return 0;
 	}
 
-	if (IS_ENABLED(CONFIG_LV_Z_POINTER_KSCAN) || IS_ENABLED(CONFIG_LV_Z_POINTER_INPUT)) {
-		lv_obj_t *hello_world_button;
+	header_label = lv_label_create(lv_scr_act());
+	lv_obj_align(header_label, LV_ALIGN_TOP_LEFT, 0, 0);
 
-		hello_world_button = lv_btn_create(lv_scr_act());
-		lv_obj_align(hello_world_button, LV_ALIGN_CENTER, 0, 0);
-		hello_world_label = lv_label_create(hello_world_button);
-	} else {
-		hello_world_label = lv_label_create(lv_scr_act());
+	for (int i = 0; i < BROADCASTERS_MAX; i++) {
+		list_label[i] = lv_label_create(lv_scr_act());
+		lv_obj_align(list_label[i], LV_ALIGN_TOP_LEFT, 0, i * 12 + 12);
 	}
-
-	lv_label_set_text(hello_world_label, "Hello world!");
-	lv_obj_align(hello_world_label, LV_ALIGN_CENTER, 0, 0);
-
-	count_label = lv_label_create(lv_scr_act());
-	lv_obj_align(count_label, LV_ALIGN_BOTTOM_MID, 0, 0);
 
 	lv_task_handler();
 	display_blanking_off(display_dev);
 
-	while (1) {
-		if ((count % 100) == 0U) {
-			sprintf(count_str, "%d", count / 100U);
-			lv_label_set_text(count_label, count_str);
-		}
-		lv_task_handler();
-		++count;
-		k_sleep(K_MSEC(10));
-	}
+	lv_label_set_text(header_label, "Scanning");
+
+	lv_task_handler();
+	return 0;
 }
 
 int bt_mgmt_scan_for_broadcast_start(struct bt_le_scan_param *scan_param, char const *const name)
