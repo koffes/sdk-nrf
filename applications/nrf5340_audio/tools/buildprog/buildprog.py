@@ -91,7 +91,7 @@ def __build_cmd_get(core: Core, device: AudioDevice, build: BuildType, pristine,
     if core == Core.app:
         build_cmd = f"west build {TARGET_CORE_APP_FOLDER} -b {TARGET_BOARD_NRF5340_AUDIO_DK_APP_NAME}"
         if device == AudioDevice.headset:
-            device_flag = "-DCONFIG_AUDIO_DEV=1"
+            device_flag = "-DCONFIG_AUDIO_DEV=1 -DSHIELD=nrf5340_audio_display"
             dest_folder = TARGET_DEV_HEADSET_FOLDER
         elif device == AudioDevice.gateway:
             device_flag = "-DCONFIG_AUDIO_DEV=2"
