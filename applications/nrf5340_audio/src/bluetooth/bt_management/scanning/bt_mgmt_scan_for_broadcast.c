@@ -58,14 +58,16 @@ K_TIMER_DEFINE(broadcast_blink_timer_on, broadcast_blink_timer_on_handler, NULL)
 
 #define NAME_SIZE_MAX	 250
 #define BROADCASTERS_MAX 10
-#define TIMEOUT_MS	 1000
-static lv_obj_t *header_label;
+#define TIMEOUT_MS	 5000
+#define V_OFFSET_PIXELS	 12
+static lv_obj_t *header_label_1;
+static lv_obj_t *header_label_2;
 static lv_obj_t *list_label[BROADCASTERS_MAX];
 
 struct name_timeout_pair {
 	sys_snode_t node;
 	char name[NAME_SIZE_MAX];
-	uint32_t last_seen;
+	uint64_t last_seen;
 };
 
 static struct name_timeout_pair n_t_pair[BROADCASTERS_MAX];
@@ -103,15 +105,28 @@ static void broadcast_blink_timer_off_handler(struct k_timer *dummy)
 
 K_TIMER_DEFINE(broadcast_blink_timer_off, broadcast_blink_timer_off_handler, NULL);
 
+static uint8_t last_seen_string_gen(char *buf, uint32_t last_seen_s)
+{
+	if (last_seen_s == 0) {
+		return sprintf(buf, "<%d s", last_seen_s);
+	} else if (last_seen_s <= 60) {
+		return sprintf(buf, "~%d s", last_seen_s);
+	} else if (last_seen_s <= 3600) {
+		return sprintf(buf, "~%d m", last_seen_s / 60);
+	} else {
+		return sprintf(buf, "~%d h", last_seen_s / 3600);
+	}
+}
+
 static void timer_worker(struct k_work *work)
 {
 	static struct name_timeout_pair *n_t_pair;
 	sys_snode_t *node;
-	char header_buf[70] = {'\0'};
+	char line_buf[70] = {'\0'};
 
 	num_broadcasters = 0;
-	sprintf(header_buf, "Scanning %d", k_uptime_get());
-	lv_label_set_text(header_label, header_buf);
+	sprintf(line_buf, "Scanning %d", (uint32_t)(k_uptime_get() / 1000));
+	lv_label_set_text(header_label_1, line_buf);
 
 	for (int i = 0; i < BROADCASTERS_MAX; i++) {
 		lv_label_set_text(list_label[i], "---");
@@ -126,10 +141,14 @@ static void timer_worker(struct k_work *work)
 			__ASSERT(removed, "Item was not removed!");
 		}
 
-		LOG_WRN("have: %s. Last seen: %lld ms ago", n_t_pair->name,
-			k_uptime_get() - n_t_pair->last_seen);
-
-		lv_label_set_text(list_label[num_broadcasters], n_t_pair->name);
+		uint32_t last_seen_ago_s =
+			(uint32_t)((k_uptime_get() - n_t_pair->last_seen) / 1000);
+		LOG_WRN("Name: %s. Last seen: %d s ago %d %lld", n_t_pair->name, last_seen_ago_s,
+			k_uptime_get(), n_t_pair->last_seen);
+		char last_seen_buf[8];
+		(void)last_seen_string_gen(last_seen_buf, last_seen_ago_s);
+		sprintf(line_buf, "%s %s", n_t_pair->name, last_seen_buf);
+		lv_label_set_text(list_label[num_broadcasters], line_buf);
 
 		num_broadcasters++;
 	}
@@ -371,9 +390,6 @@ static struct bt_le_per_adv_sync_cb sync_callbacks = {
 
 static int display_init(void)
 {
-
-	uint32_t count = 23;
-	char count_str[11] = {0};
 	const struct device *display_dev;
 
 	display_dev = DEVICE_DT_GET(DT_CHOSEN(zephyr_display));
@@ -382,18 +398,22 @@ static int display_init(void)
 		return 0;
 	}
 
-	header_label = lv_label_create(lv_scr_act());
-	lv_obj_align(header_label, LV_ALIGN_TOP_LEFT, 0, 0);
+	header_label_1 = lv_label_create(lv_scr_act());
+	lv_obj_align(header_label_1, LV_ALIGN_TOP_LEFT, 0, 0);
+	header_label_2 = lv_label_create(lv_scr_act());
+	lv_obj_align(header_label_2, LV_ALIGN_TOP_LEFT, 0, V_OFFSET_PIXELS);
 
 	for (int i = 0; i < BROADCASTERS_MAX; i++) {
 		list_label[i] = lv_label_create(lv_scr_act());
-		lv_obj_align(list_label[i], LV_ALIGN_TOP_LEFT, 0, i * 12 + 12);
+		lv_obj_align(list_label[i], LV_ALIGN_TOP_LEFT, 0,
+			     i * V_OFFSET_PIXELS + V_OFFSET_PIXELS * 2);
 	}
 
 	lv_task_handler();
 	display_blanking_off(display_dev);
 
-	lv_label_set_text(header_label, "Scanning");
+	lv_label_set_text(header_label_1, "Scanning");
+	lv_label_set_text(header_label_2, "Name                                         Last seen");
 
 	lv_task_handler();
 	return 0;
