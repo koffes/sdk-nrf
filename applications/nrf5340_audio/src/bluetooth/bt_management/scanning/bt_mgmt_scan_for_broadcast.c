@@ -45,76 +45,43 @@ static uint32_t broadcaster_broadcast_id;
 static uint8_t num_broadcasters;
 
 static const struct gpio_dt_spec center_led_g = GPIO_DT_SPEC_GET(DT_NODELABEL(rgb1_green), gpios);
-static const struct gpio_dt_spec center_led_b = GPIO_DT_SPEC_GET(DT_NODELABEL(rgb1_blue), gpios);
 
 struct broadcast_source {
 	char name[BLE_SEARCH_NAME_MAX_LEN];
 	uint32_t broadcast_id;
 };
 
-static void broadcast_blink_timer_on_handler(struct k_timer *dummy);
-
-K_TIMER_DEFINE(broadcast_blink_timer_on, broadcast_blink_timer_on_handler, NULL);
-
 #define NAME_SIZE_MAX	 250
 #define BROADCASTERS_MAX 10
-#define TIMEOUT_MS	 5000
-#define V_OFFSET_PIXELS	 12
+#define TIMEOUT_S	 5
+#define V_OFFSET_PIXELS	 20
 static lv_obj_t *header_label_1;
 static lv_obj_t *header_label_2;
-static lv_obj_t *list_label[BROADCASTERS_MAX];
+static lv_obj_t *label_name[BROADCASTERS_MAX];
+static lv_obj_t *label_time[BROADCASTERS_MAX];
 
 struct name_timeout_pair {
 	sys_snode_t node;
 	char name[NAME_SIZE_MAX];
 	uint64_t last_seen;
+	bool update;
 };
 
 static struct name_timeout_pair n_t_pair[BROADCASTERS_MAX];
-
 static sys_slist_t avail_list;
 static sys_slist_t filled_list;
 static K_MUTEX_DEFINE(module_list_lock);
 
-static void broadcast_blink_timer_on_handler(struct k_timer *dummy)
-{
-	static uint32_t counter;
-
-	if ((counter % 2) == 0) {
-		(void)gpio_pin_configure_dt(&center_led_b, GPIO_OUTPUT_ACTIVE);
-	} else {
-		(void)gpio_pin_configure_dt(&center_led_b, GPIO_OUTPUT_INACTIVE);
-	}
-	counter++;
-	if (counter > (num_broadcasters * 2) - 1) {
-		k_timer_stop(&broadcast_blink_timer_on);
-		counter = 0;
-		(void)gpio_pin_configure_dt(&center_led_b, GPIO_OUTPUT_INACTIVE);
-		return;
-	}
-}
-
-static void broadcast_blink_timer_off_handler(struct k_timer *dummy)
-{
-	(void)gpio_pin_configure_dt(&center_led_b, GPIO_OUTPUT_INACTIVE);
-	if (num_broadcasters) {
-		k_timer_start(&broadcast_blink_timer_on, K_MSEC(0),
-			      K_MSEC(250 / (num_broadcasters * 2)));
-	}
-}
-
-K_TIMER_DEFINE(broadcast_blink_timer_off, broadcast_blink_timer_off_handler, NULL);
-
 static uint8_t last_seen_string_gen(char *buf, uint32_t last_seen_s)
 {
-	if (last_seen_s == 0) {
-		return sprintf(buf, "<%d s", last_seen_s);
+	if (last_seen_s <= TIMEOUT_S) {
+		return sprintf(buf, "#00ff00 ~%d s#", last_seen_s);
 	} else if (last_seen_s <= 60) {
-		return sprintf(buf, "~%d s", last_seen_s);
+		return sprintf(buf, "#ff0000 ~%d s#", last_seen_s);
 	} else if (last_seen_s <= 3600) {
-		return sprintf(buf, "~%d m", last_seen_s / 60);
+		return sprintf(buf, "#ff0000 ~%d m#", last_seen_s / 60);
 	} else {
-		return sprintf(buf, "~%d h", last_seen_s / 3600);
+		return sprintf(buf, "#ff0000 ~%d h#", last_seen_s / 3600);
 	}
 }
 
@@ -122,33 +89,28 @@ static void timer_worker(struct k_work *work)
 {
 	static struct name_timeout_pair *n_t_pair;
 	sys_snode_t *node;
-	char line_buf[70] = {'\0'};
+	char line_buf[300] = {'\0'};
 
 	num_broadcasters = 0;
 	sprintf(line_buf, "Scanning %d", (uint32_t)(k_uptime_get() / 1000));
 	lv_label_set_text(header_label_1, line_buf);
 
-	for (int i = 0; i < BROADCASTERS_MAX; i++) {
-		lv_label_set_text(list_label[i], "---");
-	}
-
 	SYS_SLIST_FOR_EACH_NODE(&filled_list, node) {
 		n_t_pair = CONTAINER_OF(node, struct name_timeout_pair, node);
-		if (k_uptime_get() - n_t_pair->last_seen > TIMEOUT_MS) {
-			LOG_WRN("%s timed out", n_t_pair->name);
-			bool removed = sys_slist_find_and_remove(&filled_list, node);
-
-			__ASSERT(removed, "Item was not removed!");
-		}
 
 		uint32_t last_seen_ago_s =
 			(uint32_t)((k_uptime_get() - n_t_pair->last_seen) / 1000);
-		LOG_WRN("Name: %s. Last seen: %d s ago %d %lld", n_t_pair->name, last_seen_ago_s,
-			k_uptime_get(), n_t_pair->last_seen);
-		char last_seen_buf[8];
+		LOG_INF("Name: %s. Last seen: %d s ago", n_t_pair->name, last_seen_ago_s);
+		char last_seen_buf[30];
 		(void)last_seen_string_gen(last_seen_buf, last_seen_ago_s);
-		sprintf(line_buf, "%s %s", n_t_pair->name, last_seen_buf);
-		lv_label_set_text(list_label[num_broadcasters], line_buf);
+		sprintf(line_buf, "#0000ff %s#", n_t_pair->name);
+
+		if (n_t_pair->update) {
+			lv_label_set_text(label_name[num_broadcasters], line_buf);
+			n_t_pair->update = false;
+		}
+
+		lv_label_set_text(label_time[num_broadcasters], last_seen_buf);
 
 		num_broadcasters++;
 	}
@@ -156,10 +118,8 @@ static void timer_worker(struct k_work *work)
 	LOG_WRN("Num active broadcasters %d", num_broadcasters);
 	if (num_broadcasters) {
 		(void)gpio_pin_configure_dt(&center_led_g, GPIO_OUTPUT_ACTIVE);
-		k_timer_start(&broadcast_blink_timer_off, K_MSEC(750), K_MSEC(0));
 	} else {
 		(void)gpio_pin_configure_dt(&center_led_g, GPIO_OUTPUT_INACTIVE);
-		(void)gpio_pin_configure_dt(&center_led_b, GPIO_OUTPUT_INACTIVE);
 	}
 
 	lv_task_handler();
@@ -189,15 +149,32 @@ int name_add(char *name, uint8_t name_size)
 	/* Add a new node */
 	node = sys_slist_get(&avail_list);
 	if (!node) {
-		LOG_ERR("Not enough memory to store"
-			" incoming data!");
-		return 0;
+		LOG_WRN("List is full, removing oldest item");
+		uint64_t oldest_timestamp = UINT64_MAX;
+		sys_snode_t *oldest_node = NULL;
+
+		SYS_SLIST_FOR_EACH_NODE(&filled_list, node) {
+			n_t_pair = CONTAINER_OF(node, struct name_timeout_pair, node);
+			if (n_t_pair->last_seen < oldest_timestamp) {
+				oldest_timestamp = n_t_pair->last_seen;
+				oldest_node = node;
+			}
+		}
+
+		bool removed = sys_slist_find_and_remove(&filled_list, oldest_node);
+
+		__ASSERT(removed, "A node was not removed from the full list");
+		node = sys_slist_get(&avail_list);
+		if (!node) {
+			__ASSERT(false, "There should be an available node");
+		}
 	}
 	n_t_pair = CONTAINER_OF(node, struct name_timeout_pair, node);
 	memcpy(n_t_pair->name, name, name_size);
 	n_t_pair->last_seen = time_now;
+	n_t_pair->update = true;
 	sys_slist_append(&filled_list, &n_t_pair->node);
-	LOG_WRN("Added new node");
+	LOG_INF("Added new node");
 
 	return 0;
 }
@@ -391,29 +368,49 @@ static struct bt_le_per_adv_sync_cb sync_callbacks = {
 static int display_init(void)
 {
 	const struct device *display_dev;
+	static lv_style_t style_common;
+
+	lv_style_init(&style_common);
+	lv_style_set_text_font(&style_common, &lv_font_montserrat_18);
 
 	display_dev = DEVICE_DT_GET(DT_CHOSEN(zephyr_display));
 	if (!device_is_ready(display_dev)) {
-		LOG_ERR("Device not ready, aborting test");
+		LOG_ERR("Device not ready, aborting.");
 		return 0;
 	}
 
 	header_label_1 = lv_label_create(lv_scr_act());
+	lv_obj_add_style(header_label_1, &style_common, 0);
 	lv_obj_align(header_label_1, LV_ALIGN_TOP_LEFT, 0, 0);
 	header_label_2 = lv_label_create(lv_scr_act());
+	lv_obj_add_style(header_label_2, &style_common, 0);
 	lv_obj_align(header_label_2, LV_ALIGN_TOP_LEFT, 0, V_OFFSET_PIXELS);
 
 	for (int i = 0; i < BROADCASTERS_MAX; i++) {
-		list_label[i] = lv_label_create(lv_scr_act());
-		lv_obj_align(list_label[i], LV_ALIGN_TOP_LEFT, 0,
+		label_name[i] = lv_label_create(lv_scr_act());
+
+		lv_obj_align(label_name[i], LV_ALIGN_TOP_LEFT, 0,
 			     i * V_OFFSET_PIXELS + V_OFFSET_PIXELS * 2);
+		lv_label_set_recolor(label_name[i], true);
+		lv_obj_add_style(label_name[i], &style_common, 0);
+		lv_obj_set_width(label_name[i], 260);
+		lv_label_set_long_mode(label_name[i], LV_LABEL_LONG_SCROLL_CIRCULAR);
+		lv_label_set_text(label_name[i], "-");
+
+		label_time[i] = lv_label_create(lv_scr_act());
+		lv_label_set_recolor(label_time[i], true);
+		lv_obj_align(label_time[i], LV_ALIGN_TOP_RIGHT, 0,
+			     i * V_OFFSET_PIXELS + V_OFFSET_PIXELS * 2);
+		lv_obj_add_style(label_time[i], &style_common, 0);
+		lv_label_set_text(label_time[i], "-");
 	}
 
 	lv_task_handler();
 	display_blanking_off(display_dev);
 
 	lv_label_set_text(header_label_1, "Scanning");
-	lv_label_set_text(header_label_2, "Name                                         Last seen");
+	lv_label_set_text(header_label_2,
+			  LV_SYMBOL_BLUETOOTH "Name                              Last seen");
 
 	lv_task_handler();
 	return 0;
