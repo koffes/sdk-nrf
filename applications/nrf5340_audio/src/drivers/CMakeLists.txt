@@ -1,7 +1,7 @@
 #
 # Copyright (c) 2022 Nordic Semiconductor
 #
-# SPDX-License-Identifier: LicenseRef-Nordic-5-Clause
+# SPDX-License-Identifier: Apache-2.0
 #
 
 target_sources(app PRIVATE
