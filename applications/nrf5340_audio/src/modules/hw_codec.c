@@ -334,6 +334,13 @@ int hw_codec_default_conf_enable(void)
 	}
 #endif /* ((CONFIG_AUDIO_DEV == HEADSET) && CONFIG_STREAM_BIDIRECTIONAL) */
 
+#if (CONFIG_AUDIO_DEV == HEADSET)
+	ret = cs47l63_comm_reg_conf_write(fsync_ret_on_gpio, ARRAY_SIZE(fsync_ret_on_gpio));
+	if (ret) {
+		return ret;
+	} /* Note that doing this on GW caused a lot of underruns*/
+#endif	  /* #if ((CONFIG_AUDIO_DEV == HEADSET) */
+
 	/* Toggle FLL to start up CS47L63 */
 	ret = cs47l63_comm_reg_conf_write(FLL_toggle, ARRAY_SIZE(FLL_toggle));
 	if (ret) {
