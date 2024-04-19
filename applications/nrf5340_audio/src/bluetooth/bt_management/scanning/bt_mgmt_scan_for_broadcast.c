@@ -52,19 +52,21 @@ struct broadcast_source {
 };
 
 #define NAME_SIZE_MAX	 250
-#define BROADCASTERS_MAX 10
+#define BROADCASTERS_MAX 3
 #define TIMEOUT_S	 5
-#define V_OFFSET_PIXELS	 20
+#define V_OFFSET_PIXELS	 30
 static lv_obj_t *header_label_1;
 static lv_obj_t *header_label_2;
 static lv_obj_t *label_name[BROADCASTERS_MAX];
 static lv_obj_t *label_time[BROADCASTERS_MAX];
+static lv_obj_t *btn[BROADCASTERS_MAX];
 
 struct name_timeout_pair {
 	sys_snode_t node;
 	char name[NAME_SIZE_MAX];
 	uint64_t last_seen;
 	bool update;
+	uint32_t broadcast_id;
 };
 
 static struct name_timeout_pair n_t_pair[BROADCASTERS_MAX];
@@ -100,10 +102,11 @@ static void timer_worker(struct k_work *work)
 
 		uint32_t last_seen_ago_s =
 			(uint32_t)((k_uptime_get() - n_t_pair->last_seen) / 1000);
-		LOG_INF("Name: %s. Last seen: %d s ago", n_t_pair->name, last_seen_ago_s);
+		// LOG_INF("Name: %s. id: %d Last seen: %d s ago", n_t_pair->name,
+		// n_t_pair->broadcast_id, last_seen_ago_s);
 		char last_seen_buf[30];
 		(void)last_seen_string_gen(last_seen_buf, last_seen_ago_s);
-		sprintf(line_buf, "#0000ff %s#", n_t_pair->name);
+		sprintf(line_buf, "#0000ff %s# (0x%x)", n_t_pair->name, n_t_pair->broadcast_id);
 
 		if (n_t_pair->update) {
 			lv_label_set_text(label_name[num_broadcasters], line_buf);
@@ -115,7 +118,7 @@ static void timer_worker(struct k_work *work)
 		num_broadcasters++;
 	}
 
-	LOG_WRN("Num active broadcasters %d", num_broadcasters);
+	// LOG_WRN("Num active broadcasters %d", num_broadcasters);
 	if (num_broadcasters) {
 		(void)gpio_pin_configure_dt(&center_led_g, GPIO_OUTPUT_ACTIVE);
 	} else {
@@ -133,7 +136,7 @@ static void broadcast_scan_timer_handler(struct k_timer *dummy)
 };
 
 /* Shall be called for each found broadcaster */
-int name_add(char *name, uint8_t name_size)
+int name_add(char *name, uint8_t name_size, uint32_t broadcast_id)
 {
 	uint64_t time_now = k_uptime_get();
 	static struct name_timeout_pair *n_t_pair;
@@ -173,8 +176,9 @@ int name_add(char *name, uint8_t name_size)
 	memcpy(n_t_pair->name, name, name_size);
 	n_t_pair->last_seen = time_now;
 	n_t_pair->update = true;
+	n_t_pair->broadcast_id = broadcast_id;
 	sys_slist_append(&filled_list, &n_t_pair->node);
-	LOG_INF("Added new node");
+	LOG_INF("Added new node with id %d", broadcast_id);
 
 	return 0;
 }
@@ -279,7 +283,6 @@ static bool scan_check_broadcast_source(struct bt_data *data, void *user_data)
 			source->name[data->data_len] = '\0';
 		}
 
-		name_add(source->name, data->data_len);
 		return true;
 	}
 
@@ -320,6 +323,7 @@ static void scan_recv_cb(const struct bt_le_scan_recv_info *info, struct net_buf
 	}
 
 	bt_data_parse(ad, scan_check_broadcast_source, (void *)&source);
+	name_add(source.name, strlen(source.name), source.broadcast_id);
 }
 
 static void pa_synced_cb(struct bt_le_per_adv_sync *sync,
@@ -365,19 +369,29 @@ static struct bt_le_per_adv_sync_cb sync_callbacks = {
 	.term = pa_sync_terminated_cb,
 };
 
+static void btn_event_cb(lv_event_t *event)
+{
+	uint8_t device = event->user_data;
+	LOG_WRN("Clicked! %d", device);
+}
+
 static int display_init(void)
 {
 	const struct device *display_dev;
 	static lv_style_t style_common;
 
 	lv_style_init(&style_common);
-	lv_style_set_text_font(&style_common, &lv_font_montserrat_18);
+	lv_style_set_text_font(&style_common, &lv_font_montserrat_24);
+	lv_obj_t *scr = lv_scr_act();
+	lv_obj_clear_flag(scr, LV_OBJ_FLAG_SCROLLABLE);
 
 	display_dev = DEVICE_DT_GET(DT_CHOSEN(zephyr_display));
 	if (!device_is_ready(display_dev)) {
 		LOG_ERR("Device not ready, aborting.");
 		return 0;
 	}
+	lv_disp_t *disp = lv_disp_get_default();
+	int width = lv_disp_get_hor_res(disp);
 
 	header_label_1 = lv_label_create(lv_scr_act());
 	lv_obj_add_style(header_label_1, &style_common, 0);
@@ -386,8 +400,14 @@ static int display_init(void)
 	lv_obj_add_style(header_label_2, &style_common, 0);
 	lv_obj_align(header_label_2, LV_ALIGN_TOP_LEFT, 0, V_OFFSET_PIXELS);
 
+	static lv_style_t style_transp;
+	lv_style_init(&style_transp);
+	lv_style_set_bg_opa(&style_transp, LV_OPA_TRANSP);
+
 	for (int i = 0; i < BROADCASTERS_MAX; i++) {
 		label_name[i] = lv_label_create(lv_scr_act());
+		lv_obj_add_event_cb(label_name[i], btn_event_cb, LV_EVENT_PRESSED,
+				    NULL); /*Assign a callback to the button*/
 
 		lv_obj_align(label_name[i], LV_ALIGN_TOP_LEFT, 0,
 			     i * V_OFFSET_PIXELS + V_OFFSET_PIXELS * 2);
@@ -403,14 +423,20 @@ static int display_init(void)
 			     i * V_OFFSET_PIXELS + V_OFFSET_PIXELS * 2);
 		lv_obj_add_style(label_time[i], &style_common, 0);
 		lv_label_set_text(label_time[i], "-");
+
+		btn[i] = lv_btn_create(lv_scr_act());
+		lv_obj_set_pos(btn[i], 0, i * V_OFFSET_PIXELS + V_OFFSET_PIXELS * 2);
+		lv_obj_set_size(btn[i], width, V_OFFSET_PIXELS);
+		lv_obj_add_style(btn[i], &style_transp, LV_STATE_DEFAULT);
+		lv_obj_add_event_cb(btn[i], btn_event_cb, LV_EVENT_PRESSED, i);
+		// lv_obj_add_style(btn[i], LV_PART_MAIN, LV_STATE_PRESSED, &style_transp);
 	}
 
 	lv_task_handler();
 	display_blanking_off(display_dev);
 
 	lv_label_set_text(header_label_1, "Scanning");
-	lv_label_set_text(header_label_2,
-			  LV_SYMBOL_BLUETOOTH "Name                              Last seen");
+	lv_label_set_text(header_label_2, LV_SYMBOL_BLUETOOTH "Broadcaster            Last seen");
 
 	lv_task_handler();
 	return 0;
@@ -460,7 +486,7 @@ int bt_mgmt_scan_for_broadcast_start(struct bt_le_scan_param *scan_param, char c
 		return ret;
 	}
 
-	k_timer_start(&broadcast_scan_timer, K_MSEC(1000), K_MSEC(1000));
+	k_timer_start(&broadcast_scan_timer, K_MSEC(25), K_MSEC(25));
 
 	return 0;
 }
