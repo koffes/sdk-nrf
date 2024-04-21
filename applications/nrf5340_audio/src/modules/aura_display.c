@@ -16,7 +16,7 @@ static lv_obj_t *label_name[BROADCASTERS_MAX];
 static lv_obj_t *label_time[BROADCASTERS_MAX];
 static lv_obj_t *btn[BROADCASTERS_MAX];
 
-struct name_timeout_pair {
+struct brcast_src_info {
 	sys_snode_t node;
 	char name[NAME_SIZE_MAX];
 	uint64_t last_seen;
@@ -42,39 +42,57 @@ static void btn_event_cb(lv_event_t *event)
 {
 	uint8_t device = event->user_data;
 	LOG_WRN("Clicked! %d", device);
-	// periodic_adv_sync(&n_t_pair[device].info, n_t_pair[device].broadcast_id);
+	// periodic_adv_sync(&bc_src_info[device].info, bc_src_info[device].broadcast_id);
 }
 
-static struct name_timeout_pair n_t_pair[BROADCASTERS_MAX];
+static struct brcast_src_info bc_src_info[BROADCASTERS_MAX];
 static sys_slist_t avail_list;
 static sys_slist_t filled_list;
 // static K_MUTEX_DEFINE(module_list_lock);
 
+static void scan_buf_get(char *buf, uint32_t uptime_s)
+{
+	uint32_t remainder = uptime_s % 4;
+
+	if (remainder == 0) {
+		sprintf(buf, "Scan   ");
+	} else if (remainder == 1) {
+		sprintf(buf, "Scan.  ");
+	} else if (remainder == 2) {
+		sprintf(buf, "Scan.. ");
+	} else {
+		sprintf(buf, "Scan...");
+	}
+}
+
 static void timer_worker(struct k_work *work)
 {
-	static struct name_timeout_pair *n_t_pair;
+	static struct brcast_src_info *bc_src_info;
 	sys_snode_t *node;
+	uint32_t uptime_s = (uint32_t)(k_uptime_get() / 1000);
 	char line_buf[300] = {'\0'};
+	char scan_buf[8];
+	scan_buf_get(scan_buf, uptime_s);
 
 	num_broadcasters = 0;
-	sprintf(line_buf, LV_SYMBOL_BLUETOOTH "Scan.. %d", (uint32_t)(k_uptime_get() / 1000));
+	sprintf(line_buf, LV_SYMBOL_BLUETOOTH "%s %d", scan_buf, uptime_s);
 	lv_label_set_text(header_label_1, line_buf);
 
 	SYS_SLIST_FOR_EACH_NODE(&filled_list, node) {
-		n_t_pair = CONTAINER_OF(node, struct name_timeout_pair, node);
+		bc_src_info = CONTAINER_OF(node, struct brcast_src_info, node);
 
 		uint32_t last_seen_ago_s =
-			(uint32_t)((k_uptime_get() - n_t_pair->last_seen) / 1000);
-		// LOG_INF("Name: %s. id: %d Last seen: %d s ago", n_t_pair->name,
-		// n_t_pair->broadcast_id, last_seen_ago_s);
+			(uint32_t)((k_uptime_get() - bc_src_info->last_seen) / 1000);
+		// LOG_INF("Name: %s. id: %d Last seen: %d s ago", bc_src_info->name,
+		// bc_src_info->broadcast_id, last_seen_ago_s);
 		char last_seen_buf[30];
 		(void)last_seen_string_gen(last_seen_buf, last_seen_ago_s);
-		sprintf(line_buf, "#0000ff %s# (0x%x) rssi: %d", n_t_pair->name,
-			n_t_pair->broadcast_id, n_t_pair->info.rssi);
+		sprintf(line_buf, "#0000ff %s# (0x%x) rssi: %d", bc_src_info->name,
+			bc_src_info->broadcast_id, bc_src_info->info.rssi);
 
-		if (n_t_pair->update) {
+		if (bc_src_info->update) {
 			lv_label_set_text(label_name[num_broadcasters], line_buf);
-			n_t_pair->update = false;
+			bc_src_info->update = false;
 		}
 
 		lv_label_set_text(label_time[num_broadcasters], last_seen_buf);
@@ -97,13 +115,13 @@ int aura_display_submit(const struct bt_le_scan_recv_info *info, char *name, uin
 			uint32_t broadcast_id)
 {
 	uint64_t time_now = k_uptime_get();
-	static struct name_timeout_pair *n_t_pair;
+	static struct brcast_src_info *bc_src_info;
 	sys_snode_t *node;
 
 	SYS_SLIST_FOR_EACH_NODE(&filled_list, node) {
-		n_t_pair = CONTAINER_OF(node, struct name_timeout_pair, node);
-		if (strcmp(n_t_pair->name, name) == 0) {
-			n_t_pair->last_seen = time_now;
+		bc_src_info = CONTAINER_OF(node, struct brcast_src_info, node);
+		if (strcmp(bc_src_info->name, name) == 0) {
+			bc_src_info->last_seen = time_now;
 			return 0;
 		}
 	}
@@ -115,9 +133,9 @@ int aura_display_submit(const struct bt_le_scan_recv_info *info, char *name, uin
 		sys_snode_t *oldest_node = NULL;
 
 		SYS_SLIST_FOR_EACH_NODE(&filled_list, node) {
-			n_t_pair = CONTAINER_OF(node, struct name_timeout_pair, node);
-			if (n_t_pair->last_seen < oldest_timestamp) {
-				oldest_timestamp = n_t_pair->last_seen;
+			bc_src_info = CONTAINER_OF(node, struct brcast_src_info, node);
+			if (bc_src_info->last_seen < oldest_timestamp) {
+				oldest_timestamp = bc_src_info->last_seen;
 				oldest_node = node;
 			}
 		}
@@ -130,13 +148,13 @@ int aura_display_submit(const struct bt_le_scan_recv_info *info, char *name, uin
 			__ASSERT(false, "There should be an available node");
 		}
 	}
-	n_t_pair = CONTAINER_OF(node, struct name_timeout_pair, node);
-	memcpy(n_t_pair->name, name, name_size);
-	n_t_pair->last_seen = time_now;
-	n_t_pair->update = true;
-	n_t_pair->broadcast_id = broadcast_id;
-	memcpy(&n_t_pair->info, info, sizeof(struct bt_le_scan_recv_info));
-	sys_slist_append(&filled_list, &n_t_pair->node);
+	bc_src_info = CONTAINER_OF(node, struct brcast_src_info, node);
+	memcpy(bc_src_info->name, name, name_size);
+	bc_src_info->last_seen = time_now;
+	bc_src_info->update = true;
+	bc_src_info->broadcast_id = broadcast_id;
+	memcpy(&bc_src_info->info, info, sizeof(struct bt_le_scan_recv_info));
+	sys_slist_append(&filled_list, &bc_src_info->node);
 	LOG_INF("Added new node with id %d", broadcast_id);
 
 	return 0;
@@ -153,7 +171,7 @@ int aura_display_init(void)
 	sys_slist_init(&filled_list);
 
 	for (int i = 0; i < BROADCASTERS_MAX; ++i) {
-		sys_slist_append(&avail_list, &n_t_pair[i].node);
+		sys_slist_append(&avail_list, &bc_src_info[i].node);
 	}
 
 	lv_style_init(&style_common);

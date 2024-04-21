@@ -289,7 +289,7 @@ static void base_recv_cb(struct bt_bap_broadcast_sink *sink, const struct bt_bap
 		return;
 	}
 
-	LOG_DBG("Received BASE with %zu subgroup(s) from broadcast sink", base->subgroup_count);
+	LOG_WRN("Received BASE with %zu subgroup(s) from broadcast sink", base->subgroup_count);
 
 	sync_stream_cnt = 0;
 
