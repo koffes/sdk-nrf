@@ -39,8 +39,10 @@ ZBUS_CHAN_DECLARE(button_chan);
 ZBUS_CHAN_DECLARE(le_audio_chan);
 ZBUS_CHAN_DECLARE(bt_mgmt_chan);
 ZBUS_CHAN_DECLARE(volume_chan);
+ZBUS_CHAN_DECLARE(display_action_chan);
 
 ZBUS_OBS_DECLARE(volume_evt_sub);
+ZBUS_OBS_DECLARE(display_action_sub);
 
 static struct k_thread button_msg_sub_thread_data;
 static struct k_thread le_audio_msg_sub_thread_data;
@@ -386,6 +388,12 @@ static int zbus_link_producers_observers(void)
 	}
 
 	ret = zbus_chan_add_obs(&le_audio_chan, &le_audio_evt_sub, ZBUS_ADD_OBS_TIMEOUT_MS);
+	if (ret) {
+		LOG_ERR("Failed to add le_audio sub");
+		return ret;
+	}
+
+	ret = zbus_chan_add_obs(&display_action_chan, &display_action_sub, ZBUS_ADD_OBS_TIMEOUT_MS);
 	if (ret) {
 		LOG_ERR("Failed to add le_audio sub");
 		return ret;

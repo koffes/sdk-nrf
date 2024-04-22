@@ -9,6 +9,20 @@
 
 #include "le_audio.h"
 
+struct audio_codec_info {
+	uint8_t id;
+	uint16_t cid;
+	uint16_t vid;
+	int frequency;
+	int frame_duration_us;
+	enum bt_audio_location chan_allocation;
+	int octets_per_sdu;
+	int bitrate;
+	int blocks_per_sdu;
+	int subgroup;
+	int bis;
+};
+
 /**
  * @brief	Change the active audio stream if the broadcast isochronous group (BIG) contains
  *              more than one broadcast isochronous stream (BIS).

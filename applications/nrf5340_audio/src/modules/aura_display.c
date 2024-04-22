@@ -1,29 +1,46 @@
 #include "aura_display.h"
-#include <zephyr/zephyr.h>
+#include <zephyr/zbus/zbus.h>
+#include <zephyr/kernel.h>
+
+#include "macros_common.h"
+#include "broadcast_sink.h"
 
 #include <zephyr/logging/log.h>
 LOG_MODULE_REGISTER(aura_display, 4);
 
-#define NAME_SIZE_MAX	 250
-#define BROADCASTERS_MAX 3
+ZBUS_CHAN_DEFINE(display_action_chan, struct brcast_src_info, NULL, NULL, ZBUS_OBSERVERS_EMPTY,
+		 ZBUS_MSG_INIT(0));
+
+ZBUS_CHAN_DECLARE(display_action_chan);
+
+#define BROADCASTERS_MAX 6
 #define TIMEOUT_S	 5
 #define V_OFFSET_PIXELS	 30
+#define VIEW_FOCUS_LINES 6
 
 static uint8_t num_broadcasters;
 
 static lv_obj_t *header_label_1;
 static lv_obj_t *label_name[BROADCASTERS_MAX];
 static lv_obj_t *label_time[BROADCASTERS_MAX];
+static lv_obj_t *label_focus[VIEW_FOCUS_LINES];
 static lv_obj_t *btn[BROADCASTERS_MAX];
+static lv_obj_t *btn_ret_to_overview;
 
-struct brcast_src_info {
-	sys_snode_t node;
-	char name[NAME_SIZE_MAX];
-	uint64_t last_seen;
-	bool update;
-	uint32_t broadcast_id;
-	struct bt_le_scan_recv_info info;
-};
+static lv_obj_t *screen_overview;
+static lv_obj_t *screen_focus;
+
+static struct brcast_src_info bc_src_info[BROADCASTERS_MAX];
+static sys_slist_t avail_list;
+static sys_slist_t filled_list;
+
+static lv_style_t style_btn_trans;
+static lv_style_t style_btn_default;
+
+static uint8_t brcaster_in_focus;
+
+static struct audio_codec_info *codec_info_disp;
+int num_codecs;
 
 static uint8_t last_seen_string_gen(char *buf, uint32_t last_seen_s)
 {
@@ -38,17 +55,26 @@ static uint8_t last_seen_string_gen(char *buf, uint32_t last_seen_s)
 	}
 }
 
-static void btn_event_cb(lv_event_t *event)
+static void btn_event_to_overview(lv_event_t *event)
 {
-	uint8_t device = event->user_data;
-	LOG_WRN("Clicked! %d", device);
-	// periodic_adv_sync(&bc_src_info[device].info, bc_src_info[device].broadcast_id);
+	lv_scr_load(screen_overview);
+	num_codecs = 0;
 }
 
-static struct brcast_src_info bc_src_info[BROADCASTERS_MAX];
-static sys_slist_t avail_list;
-static sys_slist_t filled_list;
-// static K_MUTEX_DEFINE(module_list_lock);
+static void btn_event_to_focus(lv_event_t *event)
+{
+	int ret;
+	uint32_t device = (uint32_t)event->user_data;
+
+	brcaster_in_focus = device;
+	lv_scr_load(screen_focus);
+
+	LOG_WRN("Syncing");
+	struct brcast_src_info brcast_to_send = bc_src_info[brcaster_in_focus];
+
+	ret = zbus_chan_pub(&display_action_chan, &brcast_to_send, K_NO_WAIT);
+	ERR_CHK(ret);
+}
 
 static void scan_buf_get(char *buf, uint32_t uptime_s)
 {
@@ -65,9 +91,9 @@ static void scan_buf_get(char *buf, uint32_t uptime_s)
 	}
 }
 
-static void timer_worker(struct k_work *work)
+static void page_overview_draw(void)
 {
-	static struct brcast_src_info *bc_src_info;
+	struct brcast_src_info *bc_src_info_loc;
 	sys_snode_t *node;
 	uint32_t uptime_s = (uint32_t)(k_uptime_get() / 1000);
 	char line_buf[300] = {'\0'};
@@ -79,25 +105,71 @@ static void timer_worker(struct k_work *work)
 	lv_label_set_text(header_label_1, line_buf);
 
 	SYS_SLIST_FOR_EACH_NODE(&filled_list, node) {
-		bc_src_info = CONTAINER_OF(node, struct brcast_src_info, node);
+		bc_src_info_loc = CONTAINER_OF(node, struct brcast_src_info, node);
 
 		uint32_t last_seen_ago_s =
-			(uint32_t)((k_uptime_get() - bc_src_info->last_seen) / 1000);
-		// LOG_INF("Name: %s. id: %d Last seen: %d s ago", bc_src_info->name,
-		// bc_src_info->broadcast_id, last_seen_ago_s);
+			(uint32_t)((k_uptime_get() - bc_src_info_loc->last_seen) / 1000);
 		char last_seen_buf[30];
 		(void)last_seen_string_gen(last_seen_buf, last_seen_ago_s);
-		sprintf(line_buf, "#0000ff %s# (0x%x) rssi: %d", bc_src_info->name,
-			bc_src_info->broadcast_id, bc_src_info->info.rssi);
+		sprintf(line_buf, "#0000ff %s# (0x%x)", bc_src_info_loc->name,
+			bc_src_info_loc->broadcast_id);
 
-		if (bc_src_info->update) {
+		if (bc_src_info_loc->update) {
 			lv_label_set_text(label_name[num_broadcasters], line_buf);
-			bc_src_info->update = false;
+			bc_src_info_loc->update = false;
 		}
 
 		lv_label_set_text(label_time[num_broadcasters], last_seen_buf);
 
 		num_broadcasters++;
+	}
+}
+
+static void page_focus_draw()
+{
+	char line_buf[300] = {'\0'};
+	uint32_t last_seen_ago_s =
+		(uint32_t)((k_uptime_get() - bc_src_info[brcaster_in_focus].last_seen) / 1000);
+	char last_seen_buf[30];
+	(void)last_seen_string_gen(last_seen_buf, last_seen_ago_s);
+	sprintf(line_buf, "#0000ff %s# (0x%x)", bc_src_info[brcaster_in_focus].name,
+		bc_src_info[brcaster_in_focus].broadcast_id);
+	lv_label_set_text(label_focus[0], line_buf);
+
+	sprintf(line_buf, "rssi: %d ", bc_src_info[brcaster_in_focus].info.rssi);
+	lv_label_set_text(label_focus[1], line_buf);
+
+	if (num_codecs == 0) {
+		sprintf(line_buf, "trying to sync...");
+		lv_label_set_text(label_focus[2], line_buf);
+		lv_label_set_text(label_focus[3], "-");
+		lv_label_set_text(label_focus[4], "-");
+		lv_label_set_text(label_focus[5], "-");
+	} else if (num_codecs < 0) {
+		sprintf(line_buf, "Sync failed");
+		lv_label_set_text(label_focus[2], line_buf);
+		lv_label_set_text(label_focus[3], "-");
+		lv_label_set_text(label_focus[4], "-");
+		lv_label_set_text(label_focus[5], "-");
+
+	} else {
+		for (int i = 0; i < num_codecs; i++) {
+			sprintf(line_buf, "subgr: %d bis: %d freq: %d, bps: %d",
+				codec_info_disp[i].subgroup, codec_info_disp[i].bis,
+				codec_info_disp[i].frequency, codec_info_disp[i].bitrate);
+			lv_label_set_text(label_focus[i + 2], line_buf);
+		}
+	}
+}
+
+static void timer_worker(struct k_work *work)
+{
+	if (lv_scr_act() == screen_overview) {
+		page_overview_draw();
+	} else if (lv_scr_act() == screen_focus) {
+		page_focus_draw();
+	} else {
+		LOG_ERR("Unknown screen active.");
 	}
 
 	lv_task_handler();
@@ -110,18 +182,37 @@ static void broadcast_scan_timer_handler(struct k_timer *dummy)
 	k_work_submit(&timer_work);
 };
 
+int aura_display_submit_codec_info(struct audio_codec_info codec_info[], int num)
+{
+	if (num == 0) {
+		LOG_WRN("no codecs submitted");
+		return 0;
+	}
+
+	if (lv_scr_act() != screen_focus) {
+
+		return 0;
+	}
+	codec_info_disp = codec_info;
+	num_codecs = num;
+
+	return 0;
+}
+
 /* Shall be called for each found broadcaster */
-int aura_display_submit(const struct bt_le_scan_recv_info *info, char *name, uint8_t name_size,
-			uint32_t broadcast_id)
+int aura_display_submit_scan(const struct bt_le_scan_recv_info *info, char *name, uint8_t name_size,
+			     uint32_t broadcast_id)
 {
 	uint64_t time_now = k_uptime_get();
-	static struct brcast_src_info *bc_src_info;
+	struct brcast_src_info *bc_src_info;
 	sys_snode_t *node;
 
 	SYS_SLIST_FOR_EACH_NODE(&filled_list, node) {
 		bc_src_info = CONTAINER_OF(node, struct brcast_src_info, node);
 		if (strcmp(bc_src_info->name, name) == 0) {
+			/* This device already exists */
 			bc_src_info->last_seen = time_now;
+			memcpy(&bc_src_info->info, info, sizeof(struct bt_le_scan_recv_info));
 			return 0;
 		}
 	}
@@ -170,14 +261,17 @@ int aura_display_init(void)
 	sys_slist_init(&avail_list);
 	sys_slist_init(&filled_list);
 
+	screen_overview = lv_obj_create(NULL);
+	screen_focus = lv_obj_create(NULL);
+	lv_scr_load(screen_overview);
+
 	for (int i = 0; i < BROADCASTERS_MAX; ++i) {
 		sys_slist_append(&avail_list, &bc_src_info[i].node);
 	}
 
 	lv_style_init(&style_common);
 	lv_style_set_text_font(&style_common, &lv_font_montserrat_24);
-	lv_obj_t *scr = lv_scr_act();
-	lv_obj_clear_flag(scr, LV_OBJ_FLAG_SCROLLABLE);
+	lv_obj_clear_flag(screen_overview, LV_OBJ_FLAG_SCROLLABLE);
 
 	display_dev = DEVICE_DT_GET(DT_CHOSEN(zephyr_display));
 	if (!device_is_ready(display_dev)) {
@@ -186,42 +280,66 @@ int aura_display_init(void)
 	}
 	lv_disp_t *disp = lv_disp_get_default();
 	int width = lv_disp_get_hor_res(disp);
+	int height = lv_disp_get_ver_res(disp);
 
-	header_label_1 = lv_label_create(lv_scr_act());
+	/* Overview page */
+	header_label_1 = lv_label_create(screen_overview);
 	lv_obj_add_style(header_label_1, &style_common, 0);
 	lv_obj_align(header_label_1, LV_ALIGN_TOP_LEFT, 0, 0);
 
-	static lv_style_t style_transp;
-	lv_style_init(&style_transp);
-	lv_style_set_bg_opa(&style_transp, LV_OPA_TRANSP);
+	lv_style_init(&style_btn_trans);
+	lv_style_init(&style_btn_default);
+	lv_style_set_bg_opa(&style_btn_trans, LV_OPA_TRANSP);
+	lv_style_set_bg_color(&style_btn_default, lv_color_hex(0x123456));
+	lv_style_set_bg_opa(&style_btn_default, LV_OPA_50);
 
 	for (int i = 0; i < BROADCASTERS_MAX; i++) {
-		label_name[i] = lv_label_create(lv_scr_act());
-		lv_obj_add_event_cb(label_name[i], btn_event_cb, LV_EVENT_PRESSED,
+		label_name[i] = lv_label_create(screen_overview);
+		lv_obj_add_event_cb(label_name[i], btn_event_to_focus, LV_EVENT_PRESSED,
 				    NULL); /*Assign a callback to the button*/
 
 		lv_obj_align(label_name[i], LV_ALIGN_TOP_LEFT, 0,
-			     i * V_OFFSET_PIXELS + V_OFFSET_PIXELS * 2);
+			     i * V_OFFSET_PIXELS + V_OFFSET_PIXELS);
 		lv_label_set_recolor(label_name[i], true);
 		lv_obj_add_style(label_name[i], &style_common, 0);
 		lv_obj_set_width(label_name[i], 260);
 		lv_label_set_long_mode(label_name[i], LV_LABEL_LONG_SCROLL_CIRCULAR);
 		lv_label_set_text(label_name[i], "-");
 
-		label_time[i] = lv_label_create(lv_scr_act());
+		label_time[i] = lv_label_create(screen_overview);
 		lv_label_set_recolor(label_time[i], true);
 		lv_obj_align(label_time[i], LV_ALIGN_TOP_RIGHT, 0,
-			     i * V_OFFSET_PIXELS + V_OFFSET_PIXELS * 2);
+			     i * V_OFFSET_PIXELS + V_OFFSET_PIXELS);
 		lv_obj_add_style(label_time[i], &style_common, 0);
 		lv_label_set_text(label_time[i], "-");
 
-		btn[i] = lv_btn_create(lv_scr_act());
-		lv_obj_set_pos(btn[i], 0, i * V_OFFSET_PIXELS + V_OFFSET_PIXELS * 2);
+		btn[i] = lv_btn_create(screen_overview);
+		lv_obj_set_pos(btn[i], 0, i * V_OFFSET_PIXELS + V_OFFSET_PIXELS);
 		lv_obj_set_size(btn[i], width, V_OFFSET_PIXELS);
-		lv_obj_add_style(btn[i], &style_transp, LV_STATE_DEFAULT);
-		lv_obj_add_event_cb(btn[i], btn_event_cb, LV_EVENT_PRESSED, i);
-		// lv_obj_add_style(btn[i], LV_PART_MAIN, LV_STATE_PRESSED, &style_transp);
+		lv_obj_add_style(btn[i], &style_btn_trans, LV_STATE_DEFAULT);
+		lv_obj_add_event_cb(btn[i], btn_event_to_focus, LV_EVENT_PRESSED, (void *)i);
+		// lv_obj_add_style(btn[i], LV_PART_MAIN, LV_STATE_PRESSED, &style_btn_trans);
 	}
+
+	/* Overview page */
+	for (int i = 0; i < VIEW_FOCUS_LINES; i++) {
+		label_focus[i] = lv_label_create(screen_focus);
+		lv_obj_align(label_focus[i], LV_ALIGN_TOP_LEFT, 0, i * V_OFFSET_PIXELS);
+		lv_label_set_recolor(label_focus[i], true);
+		lv_obj_add_style(label_focus[i], &style_common, 0);
+		lv_obj_set_width(label_focus[i], 260);
+		lv_label_set_long_mode(label_focus[i], LV_LABEL_LONG_SCROLL_CIRCULAR);
+		lv_label_set_text(label_focus[i], "-");
+	}
+
+	btn_ret_to_overview = lv_btn_create(screen_focus);
+	lv_obj_set_pos(btn_ret_to_overview, 0, height - 50);
+	lv_obj_set_size(btn_ret_to_overview, 50, 50);
+	lv_obj_add_style(btn_ret_to_overview, &style_btn_default, LV_STATE_DEFAULT);
+	lv_obj_add_event_cb(btn_ret_to_overview, btn_event_to_overview, LV_EVENT_PRESSED, NULL);
+	lv_obj_t *label_btn_ret_to_overview = lv_label_create(btn_ret_to_overview);
+	lv_label_set_text(label_btn_ret_to_overview, LV_SYMBOL_LEFT);
+	lv_obj_set_style_text_align(label_btn_ret_to_overview, LV_TEXT_ALIGN_CENTER, 0);
 
 	lv_task_handler();
 	display_blanking_off(display_dev);

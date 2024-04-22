@@ -27,9 +27,17 @@ LOG_MODULE_DECLARE(bt_mgmt_scan);
  * an invalid broadcast ID.
  */
 #define INVALID_BROADCAST_ID 0xFFFFFFFF
-#define PA_SYNC_SKIP	     1
+#define PA_SYNC_SKIP	     3
 /* Similar to retries for connections */
-#define SYNC_RETRY_COUNT     6
+#define SYNC_RETRY_COUNT     9
+
+ZBUS_MSG_SUBSCRIBER_DEFINE(display_action_sub);
+
+static struct k_thread display_feedback_thread_data;
+
+static k_tid_t display_feedback_thread_id;
+
+K_THREAD_STACK_DEFINE(display_feedback_thread_stack, 2048);
 
 ZBUS_CHAN_DECLARE(bt_mgmt_chan);
 
@@ -60,8 +68,9 @@ K_WORK_DEFINE(scan_restart_work, scan_restart_worker);
 
 static void pa_sync_timeout(struct k_timer *timer)
 {
-	LOG_WRN("PA sync create timed out, restarting scanning");
+	LOG_WRN("PA sync create timed out");
 
+	aura_display_submit_codec_info(NULL, -ETIMEDOUT);
 	k_work_submit(&scan_restart_work);
 }
 
@@ -98,8 +107,9 @@ static void periodic_adv_sync(const struct bt_le_scan_recv_info *info, uint32_t 
 	broadcaster_broadcast_id = broadcast_id;
 
 	/* Set timeout to same value as PA sync timeout in ms */
-	k_timer_start(&pa_sync_timer, K_MSEC(param.timeout * 100), K_NO_WAIT);
+	k_timer_start(&pa_sync_timer, K_MSEC(param.timeout * 20), K_NO_WAIT);
 
+	LOG_WRN("Creating adv sync");
 	ret = bt_le_per_adv_sync_create(&param, &pa_sync);
 	if (ret) {
 		LOG_ERR("Could not sync to PA: %d", ret);
@@ -171,7 +181,7 @@ static void scan_recv_cb(const struct bt_le_scan_recv_info *info, struct net_buf
 	}
 
 	bt_data_parse(ad, scan_check_broadcast_source, (void *)&source);
-	aura_display_submit(info, source.name, strlen(source.name), source.broadcast_id);
+	aura_display_submit_scan(info, source.name, strlen(source.name), source.broadcast_id);
 }
 
 static void pa_synced_cb(struct bt_le_per_adv_sync *sync,
@@ -217,9 +227,35 @@ static struct bt_le_per_adv_sync_cb sync_callbacks = {
 	.term = pa_sync_terminated_cb,
 };
 
+static void display_feedback_thread(void)
+{
+	int ret;
+	const struct zbus_channel *chan;
+
+	struct brcast_src_info msg;
+	while (1) {
+		ret = zbus_sub_wait_msg(&display_action_sub, &chan, &msg, K_FOREVER);
+		ERR_CHK(ret);
+
+		periodic_adv_sync(&msg.info, msg.broadcast_id);
+
+		LOG_WRN("Received event from DISPLAY");
+	}
+}
+
 int bt_mgmt_scan_for_broadcast_start(struct bt_le_scan_param *scan_param, char const *const name)
 {
 	int ret;
+
+	display_feedback_thread_id =
+		k_thread_create(&display_feedback_thread_data, display_feedback_thread_stack, 2048,
+				(k_thread_entry_t)display_feedback_thread, NULL, NULL, NULL,
+				K_PRIO_PREEMPT(CONFIG_LE_AUDIO_MSG_SUB_THREAD_PRIO), 0, K_NO_WAIT);
+	ret = k_thread_name_set(display_feedback_thread_id, "DISPLAY_FEEDBACK_THREAD");
+	if (ret) {
+		LOG_ERR("Failed to create le_audio_msg thread");
+		return ret;
+	}
 
 	ret = aura_display_init();
 	if (ret) {
