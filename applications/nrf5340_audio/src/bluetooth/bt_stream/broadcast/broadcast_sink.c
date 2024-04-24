@@ -153,7 +153,7 @@ static void get_codec_info(const struct bt_audio_codec_cfg *codec,
 
 static void stream_started_cb(struct bt_bap_stream *stream)
 {
-	// le_audio_event_publish(LE_AUDIO_EVT_STREAMING);
+	le_audio_event_publish(LE_AUDIO_EVT_STREAMING);
 
 	/* NOTE: The string below is used by the Nordic CI system */
 	LOG_INF("Stream index %d started", active_stream_index);
@@ -260,15 +260,16 @@ static void base_recv_cb(struct bt_bap_broadcast_sink *sink, const struct bt_bap
 		}
 	}
 
+	aura_display_submit_codec_info(audio_codec_info, sync_stream_cnt);
 	broadcast_sink_disable();
 
-	aura_display_submit_codec_info(audio_codec_info, sync_stream_cnt);
+	le_audio_event_publish(LE_AUDIO_EVT_SYNC_LOST);
 }
 
 static void syncable_cb(struct bt_bap_broadcast_sink *sink, bool encrypted)
 {
 	int ret;
-	return;
+	// return;
 	static uint8_t bis_encryption_key[BT_ISO_BROADCAST_CODE_SIZE] = {0};
 	struct bt_bap_stream *audio_streams_p[] = {&audio_streams[active_stream_index]};
 

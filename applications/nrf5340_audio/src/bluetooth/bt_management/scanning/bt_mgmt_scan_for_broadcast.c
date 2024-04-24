@@ -27,9 +27,9 @@ LOG_MODULE_DECLARE(bt_mgmt_scan);
  * an invalid broadcast ID.
  */
 #define INVALID_BROADCAST_ID 0xFFFFFFFF
-#define PA_SYNC_SKIP	     3
+#define PA_SYNC_SKIP	     2
 /* Similar to retries for connections */
-#define SYNC_RETRY_COUNT     9
+#define SYNC_RETRY_COUNT     6
 
 ZBUS_MSG_SUBSCRIBER_DEFINE(display_action_sub);
 
@@ -57,10 +57,20 @@ static void scan_restart_worker(struct k_work *work)
 {
 	int ret;
 
+	ret = bt_le_scan_stop();
+	if (ret && ret != -EALREADY) {
+		LOG_WRN("Stop scan failed: %d", ret);
+	}
+
 	/* Delete pending PA sync before restarting scan */
 	ret = bt_mgmt_pa_sync_delete(pa_sync);
 	if (ret) {
 		LOG_WRN("Failed to delete pending PA sync: %d", ret);
+	}
+
+	ret = bt_mgmt_scan_start(0, 0, BT_MGMT_SCAN_TYPE_BROADCAST, NULL);
+	if (ret) {
+		LOG_WRN("Failed to restart scanning for broadcast: %d", ret);
 	}
 }
 
@@ -237,9 +247,14 @@ static void display_feedback_thread(void)
 		ret = zbus_sub_wait_msg(&display_action_sub, &chan, &msg, K_FOREVER);
 		ERR_CHK(ret);
 
-		periodic_adv_sync(&msg.info, msg.broadcast_id);
+		ret = bt_le_scan_stop();
+		if (ret) {
+			LOG_ERR("Failed to stop scan: %d", ret);
+			return;
+		}
 
-		LOG_WRN("Received event from DISPLAY");
+		LOG_WRN("syncing to id 0x%x", msg.broadcast_id);
+		periodic_adv_sync(&msg.info, msg.broadcast_id);
 	}
 }
 
@@ -247,18 +262,20 @@ int bt_mgmt_scan_for_broadcast_start(struct bt_le_scan_param *scan_param, char c
 {
 	int ret;
 
+	LOG_WRN("trying to restart scanning for broadcast");
+
 	display_feedback_thread_id =
 		k_thread_create(&display_feedback_thread_data, display_feedback_thread_stack, 2048,
 				(k_thread_entry_t)display_feedback_thread, NULL, NULL, NULL,
 				K_PRIO_PREEMPT(CONFIG_LE_AUDIO_MSG_SUB_THREAD_PRIO), 0, K_NO_WAIT);
-	ret = k_thread_name_set(display_feedback_thread_id, "DISPLAY_FEEDBACK_THREAD");
-	if (ret) {
+	if (display_feedback_thread_id < 0) {
 		LOG_ERR("Failed to create le_audio_msg thread");
 		return ret;
 	}
 
-	ret = aura_display_init();
+	ret = k_thread_name_set(display_feedback_thread_id, "DISPLAY_FEEDBACK_THREAD");
 	if (ret) {
+		LOG_ERR("Failed to set thread name");
 		return ret;
 	}
 
@@ -271,22 +288,13 @@ int bt_mgmt_scan_for_broadcast_start(struct bt_le_scan_param *scan_param, char c
 		scan_callback.recv = scan_recv_cb;
 		bt_le_scan_cb_register(&scan_callback);
 		scan_cb_registered = true;
-	} else {
-		if (name == srch_name) {
-			return -EALREADY;
-		}
-		/* Already scanning, stop current scan to update param in case it has changed */
-		ret = bt_le_scan_stop();
-		if (ret) {
-			LOG_ERR("Failed to stop scan: %d", ret);
-			return ret;
-		}
 	}
 
 	srch_name = name;
 
 	ret = bt_le_scan_start(scan_param, NULL);
 	if (ret) {
+		LOG_ERR("bt_le_scan_start failed");
 		return ret;
 	}
 

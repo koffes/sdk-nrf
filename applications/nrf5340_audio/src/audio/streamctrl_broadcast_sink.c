@@ -19,6 +19,7 @@
 #include "bt_rend.h"
 #include "audio_datapath.h"
 #include "le_audio_rx.h"
+#include "aura_display.h"
 
 #include <zephyr/logging/log.h>
 LOG_MODULE_REGISTER(streamctrl_broadcast_sink, CONFIG_STREAMCTRL_LOG_LEVEL);
@@ -340,7 +341,7 @@ static void bt_mgmt_evt_handler(const struct zbus_channel *chan)
 		break;
 
 	case BT_MGMT_PA_SYNC_LOST:
-		LOG_INF("PA sync lost");
+		LOG_WRN("PA sync lost");
 
 		if (IS_ENABLED(CONFIG_BT_OBSERVER)) {
 			ret = bt_mgmt_scan_start(0, 0, BT_MGMT_SCAN_TYPE_BROADCAST, NULL);
@@ -453,7 +454,10 @@ int streamctrl_start(void)
 	ret = broadcast_sink_enable(le_audio_rx_data_handler);
 	ERR_CHK_MSG(ret, "Failed to enable broadcast sink");
 
-	ret = bt_mgmt_scan_start(0, 0, BT_MGMT_SCAN_TYPE_BROADCAST, CONFIG_BT_AUDIO_BROADCAST_NAME);
+	ret = aura_display_init();
+	ERR_CHK_MSG(ret, "Failed to initialize display");
+
+	ret = bt_mgmt_scan_start(0, 0, BT_MGMT_SCAN_TYPE_BROADCAST, NULL);
 	ERR_CHK_MSG(ret, "Failed to start scanning");
 
 	started = true;
