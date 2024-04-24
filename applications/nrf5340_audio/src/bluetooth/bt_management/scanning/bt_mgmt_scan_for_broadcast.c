@@ -105,14 +105,21 @@ static uint16_t interval_to_sync_timeout(uint16_t interval)
 static void periodic_adv_sync(const struct bt_le_scan_recv_info *info, uint32_t broadcast_id)
 {
 	int ret;
-	struct bt_le_per_adv_sync_param param;
+	static struct bt_le_per_adv_sync_param param;
 
 	bt_addr_le_copy(&param.addr, info->addr);
 	param.options = 0;
 	param.sid = info->sid;
 	param.skip = PA_SYNC_SKIP;
 	param.timeout = interval_to_sync_timeout(info->interval);
-	LOG_WRN("interval is %d id is 0x%x", info->interval, broadcast_id);
+	char local_addr_str1[BT_ADDR_LE_STR_LEN] = {'\0'};
+	char local_addr_str2[BT_ADDR_LE_STR_LEN] = {'\0'};
+
+	(void)bt_addr_le_to_str(&param.addr, local_addr_str1, BT_ADDR_LE_STR_LEN);
+	(void)bt_addr_le_to_str(info->addr, local_addr_str2, BT_ADDR_LE_STR_LEN);
+
+	LOG_WRN("interval is %d id is 0x%x sid is %d addr1 %s  addr2 %s", info->interval,
+		broadcast_id, param.sid, local_addr_str1, local_addr_str2);
 
 	broadcaster_broadcast_id = broadcast_id;
 
@@ -242,7 +249,7 @@ static void display_feedback_thread(void)
 	int ret;
 	const struct zbus_channel *chan;
 
-	struct brcast_src_info msg;
+	static struct brcast_src_info msg;
 	while (1) {
 		ret = zbus_sub_wait_msg(&display_action_sub, &chan, &msg, K_FOREVER);
 		ERR_CHK(ret);
@@ -253,7 +260,13 @@ static void display_feedback_thread(void)
 			return;
 		}
 
-		LOG_WRN("syncing to id 0x%x", msg.broadcast_id);
+		char local_addr_str[BT_ADDR_LE_STR_LEN] = {'\0'};
+
+		msg.info.addr = &msg.addr;
+
+		(void)bt_addr_le_to_str(msg.info.addr, local_addr_str, BT_ADDR_LE_STR_LEN);
+
+		LOG_WRN("-----syncing to id 0x%x addr: %s", msg.broadcast_id, local_addr_str);
 		periodic_adv_sync(&msg.info, msg.broadcast_id);
 	}
 }

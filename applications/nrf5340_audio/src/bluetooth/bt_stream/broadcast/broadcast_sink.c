@@ -33,10 +33,12 @@ struct active_audio_stream {
 	uint32_t pd;
 };
 
+#define MAX_STREAMS 4
+
 static struct bt_bap_broadcast_sink *broadcast_sink;
-static struct bt_bap_stream audio_streams[CONFIG_BT_BAP_BROADCAST_SNK_STREAM_COUNT];
-static struct audio_codec_info audio_codec_info[CONFIG_BT_BAP_BROADCAST_SNK_STREAM_COUNT];
-static uint32_t bis_index_bitfields[CONFIG_BT_BAP_BROADCAST_SNK_STREAM_COUNT];
+static struct bt_bap_stream audio_streams[MAX_STREAMS];
+static struct audio_codec_info audio_codec_info[MAX_STREAMS];
+static uint32_t bis_index_bitfields[MAX_STREAMS];
 
 static struct bt_le_per_adv_sync *pa_sync_stored;
 
@@ -256,7 +258,7 @@ static void base_recv_cb(struct bt_bap_broadcast_sink *sink, const struct bt_bap
 		}
 
 		if (sync_stream_cnt >= ARRAY_SIZE(audio_streams)) {
-			break;
+			LOG_WRN("array size reached");
 		}
 	}
 

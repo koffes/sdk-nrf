@@ -14,10 +14,11 @@
 struct brcast_src_info {
 	sys_snode_t node;
 	char name[NAME_SIZE_MAX];
-	uint64_t last_seen;
-	bool update;
 	uint32_t broadcast_id;
 	struct bt_le_scan_recv_info info;
+	bt_addr_le_t addr;
+	uint64_t last_seen;
+	bool update;
 };
 
 int aura_display_submit_codec_info(struct audio_codec_info codec_info[], int num);

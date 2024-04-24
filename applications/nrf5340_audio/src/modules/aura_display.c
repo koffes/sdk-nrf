@@ -69,10 +69,14 @@ static void btn_event_to_focus(lv_event_t *event)
 	brcaster_in_focus = device;
 	lv_scr_load(screen_focus);
 
-	LOG_WRN("Syncing");
-	struct brcast_src_info brcast_to_send = bc_src_info[brcaster_in_focus];
+	char local_addr_str[BT_ADDR_LE_STR_LEN] = {'\0'};
 
-	ret = zbus_chan_pub(&display_action_chan, &brcast_to_send, K_NO_WAIT);
+	(void)bt_addr_le_to_str(bc_src_info[brcaster_in_focus].info.addr, local_addr_str,
+				BT_ADDR_LE_STR_LEN);
+
+	LOG_WRN("sending to zbus addr %s", local_addr_str);
+
+	ret = zbus_chan_pub(&display_action_chan, &bc_src_info[brcaster_in_focus], K_NO_WAIT);
 	ERR_CHK(ret);
 }
 
@@ -96,7 +100,7 @@ static void page_overview_draw(void)
 	struct brcast_src_info *bc_src_info_loc;
 	sys_snode_t *node;
 	uint32_t uptime_s = (uint32_t)(k_uptime_get() / 1000);
-	char line_buf[300] = {'\0'};
+	char line_buf[310] = {'\0'};
 	char scan_buf[8];
 	scan_buf_get(scan_buf, uptime_s);
 
@@ -111,8 +115,14 @@ static void page_overview_draw(void)
 			(uint32_t)((k_uptime_get() - bc_src_info_loc->last_seen) / 1000);
 		char last_seen_buf[30];
 		(void)last_seen_string_gen(last_seen_buf, last_seen_ago_s);
-		sprintf(line_buf, "#0000ff %s# (0x%x)", bc_src_info_loc->name,
-			bc_src_info_loc->broadcast_id);
+		char local_addr_str[BT_ADDR_LE_STR_LEN] = {'\0'};
+
+		(void)bt_addr_le_to_str(&bc_src_info_loc->addr, local_addr_str, BT_ADDR_LE_STR_LEN);
+		// LOG_INF("Addr: %s brcast id 0x%x num brcasters %d", local_addr_str,
+		//	bc_src_info_loc->broadcast_id, num_broadcasters);
+
+		sprintf(line_buf, "#0000ff %s# (0x%x) addr: %s", bc_src_info_loc->name,
+			bc_src_info_loc->broadcast_id, local_addr_str);
 
 		if (bc_src_info_loc->update) {
 			lv_label_set_text(label_name[num_broadcasters], line_buf);
@@ -207,6 +217,10 @@ int aura_display_submit_scan(const struct bt_le_scan_recv_info *info, char *name
 	struct brcast_src_info *bc_src_info;
 	sys_snode_t *node;
 
+	char local_addr_str2[BT_ADDR_LE_STR_LEN] = {'\0'};
+
+	(void)bt_addr_le_to_str(info->addr, local_addr_str2, BT_ADDR_LE_STR_LEN);
+
 	SYS_SLIST_FOR_EACH_NODE(&filled_list, node) {
 		bc_src_info = CONTAINER_OF(node, struct brcast_src_info, node);
 		if (strcmp(bc_src_info->name, name) == 0) {
@@ -245,8 +259,9 @@ int aura_display_submit_scan(const struct bt_le_scan_recv_info *info, char *name
 	bc_src_info->update = true;
 	bc_src_info->broadcast_id = broadcast_id;
 	memcpy(&bc_src_info->info, info, sizeof(struct bt_le_scan_recv_info));
+	memcpy(&bc_src_info->addr, info->addr, sizeof(bt_addr_le_t));
+	bc_src_info->info.addr = &bc_src_info->addr;
 	sys_slist_append(&filled_list, &bc_src_info->node);
-	LOG_INF("Added new node with id %d", broadcast_id);
 
 	return 0;
 }
