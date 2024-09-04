@@ -94,7 +94,7 @@ static enum bt_audio_location stream_location[CONFIG_BT_ISO_MAX_BIG]
 						     {{BT_AUDIO_LOCATION_MONO_AUDIO}}};
 
 static uint8_t lc3_streamer_idx[CONFIG_BT_ISO_MAX_BIG][CONFIG_BT_BAP_BROADCAST_SRC_SUBGROUP_COUNT]
-			   [CONFIG_BT_BAP_BROADCAST_SRC_STREAM_COUNT];
+			       [CONFIG_BT_BAP_BROADCAST_SRC_STREAM_COUNT];
 
 #define LC3_STREAMER_INDEX_UNUSED 0xFF
 
@@ -166,7 +166,8 @@ static void stream_get_frame_and_send(struct stream_index stream_idx)
 {
 	int ret;
 
-	uint8_t stream_file_idx = lc3_streamer_idx[stream_idx.lvl1][stream_idx.lvl2][stream_idx.lvl3];
+	uint8_t stream_file_idx =
+		lc3_streamer_idx[stream_idx.lvl1][stream_idx.lvl2][stream_idx.lvl3];
 
 	if (stream_file_idx == LC3_STREAMER_INDEX_UNUSED) {
 		LOG_ERR("Stream index is unused");
@@ -221,8 +222,8 @@ static void le_audio_msg_sub_thread(void)
 
 		switch (msg.event) {
 		case LE_AUDIO_EVT_STREAM_SENT:
-			LOG_DBG("LE_AUDIO_EVT_STREAM_SENT for stream %d.%d.%d", msg.idx.lvl1, msg.idx.lvl2,
-				msg.idx.lvl3);
+			LOG_DBG("LE_AUDIO_EVT_STREAM_SENT for stream %d.%d.%d", msg.idx.lvl1,
+				msg.idx.lvl2, msg.idx.lvl3);
 
 			stream_get_frame_and_send(msg.idx);
 
@@ -1484,7 +1485,7 @@ static int cmd_file_list(const struct shell *shell, size_t argc, char **argv)
 		dir_path = argv[1];
 	}
 
-	ret = sd_card_list_files(dir_path, buf, &buf_size);
+	ret = sd_card_list_files(dir_path, buf, &buf_size, true);
 	if (ret) {
 		shell_error(shell, "List files err: %d", ret);
 		return ret;
@@ -2194,3 +2195,47 @@ SHELL_STATIC_SUBCMD_SET_CREATE(
 	SHELL_SUBCMD_SET_END);
 
 SHELL_CMD_REGISTER(bct, &configuration_cmd, "Broadcast Configuration Tool", NULL);
+
+static int cmd_autocomplete(const struct shell *sh, size_t argc, char *argv[])
+{
+
+	LOG_WRN("cmd_erase %s %s", argv[0], argv[1]);
+}
+
+static void file_paths_get(size_t idx, struct shell_static_entry *entry);
+
+SHELL_DYNAMIC_CMD_CREATE(folder_names, file_paths_get);
+
+static void file_paths_get(size_t idx, struct shell_static_entry *entry)
+{
+
+	int ret;
+	char buf[FILE_LIST_BUF_SIZE];
+	size_t buf_size = FILE_LIST_BUF_SIZE;
+
+	/* ret = sd_card_list_files(NULL, buf, &buf_size, true); */
+
+	if (idx == 0) {
+		entry->syntax = "AA/FF";
+	} else if (idx == 1) {
+		entry->syntax = "BB";
+	} else {
+		entry->syntax = NULL;
+	}
+	entry->handler = NULL;
+	entry->help = NULL;
+	entry->subcmd = &folder_names;
+}
+
+SHELL_STATIC_SUBCMD_SET_CREATE(flash_cmds,
+			       SHELL_CMD_ARG(autocomplete, &folder_names, "autocomplete",
+					     cmd_autocomplete, 2, 2),
+			       SHELL_SUBCMD_SET_END);
+
+static int cmd_dummy(const struct shell *sh, size_t argc, char **argv)
+{
+	shell_error(sh, "%s:unknown parameter: %s", argv[0], argv[1]);
+	return -EINVAL;
+}
+
+SHELL_CMD_ARG_REGISTER(listfiles, &flash_cmds, "autocomplete test", cmd_dummy, 2, 0);
