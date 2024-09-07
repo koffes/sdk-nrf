@@ -491,6 +491,9 @@ static void broadcast_config_clear(void)
 	}
 }
 
+/**
+ * @brief	Replaces first carriage return or line feed with null terminator.
+ */
 static void remove_cr_lf(char *str)
 {
 	char *p = str;
@@ -504,12 +507,10 @@ static void remove_cr_lf(char *str)
 	}
 }
 
-/* Memory intensive but simple implementation */
-
-#define SD_FILECOUNT_MAX 80
-#define SD_PATHLEN_MAX	 100
-#define FOLDER_BUF_MAX	 200
-#define SD_LEVEL_MAX	 3
+#define SD_FILECOUNT_MAX 120
+#define SD_PATHLEN_MAX	 140
+#define FOLDER_BUF_MAX	 800
+#define SD_LEVEL_MAX	 7
 static char sd_paths_and_files[SD_FILECOUNT_MAX][SD_PATHLEN_MAX] = {'\0'};
 uint32_t num_files_added;
 
@@ -520,14 +521,8 @@ static int traverse_down(char *path, uint8_t level)
 	char *tmp_file_ptr = tmp_file_buf;
 	size_t buf_size = FOLDER_BUF_MAX;
 
-	if (path != NULL) {
-		LOG_WRN("entered level: %d Path is %s", level, path);
-	} else {
-		LOG_WRN("entered level: %d Path is NULL", level);
-	}
-
 	if (level > SD_LEVEL_MAX) {
-		LOG_WRN("At level %d, max level reached", level);
+		LOG_DBG("At level %d, max level reached", level);
 		return 0;
 	}
 
@@ -539,44 +534,50 @@ static int traverse_down(char *path, uint8_t level)
 		return ret;
 	}
 
-	LOG_WRN("level %d tmp_file_buf is: %s", level, tmp_file_buf);
+	LOG_DBG("level %d tmp_file_buf is: %s", level, tmp_file_buf);
 
 	char *token = strtok_r(tmp_file_ptr, "\r\n", &tmp_file_ptr);
 
 	while (token != NULL) {
+		if (strstr(token, "System Volume Information") != NULL) {
+			LOG_DBG("Skipping System Volume Information");
+			token = strtok_r(NULL, "\n", &tmp_file_ptr);
+		}
+
+		if (strstr(token, ".wav") != NULL) {
+			LOG_DBG("Skipping wav files");
+			token = strtok_r(NULL, "\n", &tmp_file_ptr);
+		}
+
 		remove_cr_lf(token);
-		LOG_WRN("level %d, token is: %s.", level, token);
+		LOG_DBG("level %d, token is: %s.", level, token);
 		char fullPath[SD_PATHLEN_MAX] = {'\0'};
 
 		if (path != NULL) {
-			LOG_WRN("Adding %s to %s", path, fullPath);
 			remove_cr_lf(path);
 			strcat(fullPath, path);
 			strcat(fullPath, "/");
-		} else {
-			LOG_ERR("Path is NULL");
 		}
-		LOG_WRN("Adding %s to %s", token, fullPath);
+
 		strcat(fullPath, token);
-		LOG_WRN("Fullpath: %s", fullPath);
+		LOG_DBG("Fullpath: %s", fullPath);
 
 		if (strstr(token, ".lc3") != NULL) {
 			strcpy(sd_paths_and_files[num_files_added], fullPath);
 			num_files_added++;
-			LOG_ERR("Added file num %d %s", num_files_added, fullPath);
+			LOG_DBG("Added file num %d %s", num_files_added, fullPath);
 			if (num_files_added >= SD_FILECOUNT_MAX) {
 				LOG_WRN("Max file count reached");
 			}
 		} else {
 			ret = traverse_down(fullPath, level + 1);
 			if (ret) {
-				LOG_INF("going up. Traverse down failed");
+				LOG_DBG("Going up on level.");
 			}
 		}
 		token = strtok_r(NULL, "\n", &tmp_file_ptr);
 	}
 
-	LOG_INF("going up end of func from %d to %d", level, level - 1);
 	return 0;
 }
 
@@ -590,7 +591,7 @@ static int sd_card_toc_gen(void)
 		return ret;
 	}
 
-	LOG_WRN("back from traverse down");
+	LOG_INF("Number of *.lc3 files on SD card: %d", num_files_added);
 
 	return 0;
 }
@@ -2262,11 +2263,27 @@ static int cmd_clear(const struct shell *shell, size_t argc, char **argv)
 	return 0;
 }
 
+static void file_paths_get(size_t idx, struct shell_static_entry *entry);
+
+SHELL_DYNAMIC_CMD_CREATE(folder_names, file_paths_get);
+
+static void file_paths_get(size_t idx, struct shell_static_entry *entry)
+{
+	if (idx < num_files_added) {
+		entry->syntax = sd_paths_and_files[idx];
+	} else {
+		entry->syntax = NULL;
+	}
+	entry->handler = NULL;
+	entry->help = NULL;
+	entry->subcmd = &folder_names;
+}
+
 SHELL_STATIC_SUBCMD_SET_CREATE(sub_file_cmd,
 			       SHELL_COND_CMD(CONFIG_SHELL, list, NULL, "List files on SD card",
 					      cmd_file_list),
-			       SHELL_COND_CMD(CONFIG_SHELL, select, NULL, "Select file on SD card",
-					      cmd_file_select),
+			       SHELL_CMD_ARG(select, &folder_names, "List files on SD card",
+					     cmd_file_select, 4, 2),
 			       SHELL_SUBCMD_SET_END);
 
 SHELL_STATIC_SUBCMD_SET_CREATE(
@@ -2303,38 +2320,3 @@ SHELL_STATIC_SUBCMD_SET_CREATE(
 	SHELL_SUBCMD_SET_END);
 
 SHELL_CMD_REGISTER(bct, &configuration_cmd, "Broadcast Configuration Tool", NULL);
-
-static int cmd_autocomplete(const struct shell *sh, size_t argc, char *argv[])
-{
-
-	LOG_WRN("cmd_erase %s %s", argv[0], argv[1]);
-}
-
-static void file_paths_get(size_t idx, struct shell_static_entry *entry);
-
-SHELL_DYNAMIC_CMD_CREATE(folder_names, file_paths_get);
-
-static void file_paths_get(size_t idx, struct shell_static_entry *entry)
-{
-	if (idx < num_files_added) {
-		entry->syntax = sd_paths_and_files[idx];
-	} else {
-		entry->syntax = NULL;
-	}
-	entry->handler = NULL;
-	entry->help = NULL;
-	entry->subcmd = &folder_names;
-}
-
-SHELL_STATIC_SUBCMD_SET_CREATE(flash_cmds,
-			       SHELL_CMD_ARG(autocomplete, &folder_names, "autocomplete",
-					     cmd_autocomplete, 2, 2),
-			       SHELL_SUBCMD_SET_END);
-
-static int cmd_dummy(const struct shell *sh, size_t argc, char **argv)
-{
-	shell_error(sh, "%s:unknown parameter: %s", argv[0], argv[1]);
-	return -EINVAL;
-}
-
-SHELL_CMD_ARG_REGISTER(listfiles, &flash_cmds, "autocomplete test", cmd_dummy, 2, 0);

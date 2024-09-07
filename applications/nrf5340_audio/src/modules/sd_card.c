@@ -61,7 +61,7 @@ int sd_card_list_files(char const *const path, char *buf, size_t *buf_size, bool
 
 		ret = fs_opendir(&dirp, abs_path_name);
 		if (ret) {
-			LOG_ERR("Open assigned path failed %d", ret);
+			LOG_WRN("Open assigned path failed %d. %s", ret, abs_path_name);
 			return ret;
 		}
 	}
