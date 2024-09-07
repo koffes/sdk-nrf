@@ -511,7 +511,7 @@ static void remove_cr_lf(char *str)
 #define FOLDER_BUF_MAX	 200
 #define SD_LEVEL_MAX	 3
 static char sd_paths_and_files[SD_FILECOUNT_MAX][SD_PATHLEN_MAX] = {'\0'};
-uint32_t current_file_num;
+uint32_t num_files_added;
 
 static int traverse_down(char *path, uint8_t level)
 {
@@ -561,10 +561,10 @@ static int traverse_down(char *path, uint8_t level)
 		LOG_WRN("Fullpath: %s", fullPath);
 
 		if (strstr(token, ".lc3") != NULL) {
-			strcpy(sd_paths_and_files[current_file_num], fullPath);
-			current_file_num++;
-			LOG_ERR("Added file num %d %s", current_file_num, fullPath);
-			if (current_file_num >= SD_FILECOUNT_MAX) {
+			strcpy(sd_paths_and_files[num_files_added], fullPath);
+			num_files_added++;
+			LOG_ERR("Added file num %d %s", num_files_added, fullPath);
+			if (num_files_added >= SD_FILECOUNT_MAX) {
 				LOG_WRN("Max file count reached");
 			}
 		} else {
@@ -2316,17 +2316,8 @@ SHELL_DYNAMIC_CMD_CREATE(folder_names, file_paths_get);
 
 static void file_paths_get(size_t idx, struct shell_static_entry *entry)
 {
-
-	LOG_WRN("idx %d", idx);
-
-	// ret = sd_card_list_files(NULL, buf, &buf_size, true);
-
-	if (idx == 0) {
-		entry->syntax = "AA/FF";
-	} else if (idx == 1) {
-		entry->syntax = "ABA";
-	} else if (idx == 2) {
-		entry->syntax = "ABC";
+	if (idx < num_files_added) {
+		entry->syntax = sd_paths_and_files[idx];
 	} else {
 		entry->syntax = NULL;
 	}
