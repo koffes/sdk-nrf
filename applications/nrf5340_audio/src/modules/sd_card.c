@@ -61,7 +61,7 @@ int sd_card_list_files(char const *const path, char *buf, size_t *buf_size, bool
 
 		ret = fs_opendir(&dirp, abs_path_name);
 		if (ret) {
-			LOG_ERR("Open assigned path failed");
+			LOG_ERR("Open assigned path failed %d", ret);
 			return ret;
 		}
 	}
@@ -82,11 +82,11 @@ int sd_card_list_files(char const *const path, char *buf, size_t *buf_size, bool
 
 			if (extra_info) {
 				len = snprintk(&buf[used_buf_size], remaining_buf_size,
-					       "[%s]\t%s\n",
+					       "[%s]\t%s\r\n",
 					       entry.type == FS_DIR_ENTRY_DIR ? "DIR " : "FILE",
 					       entry.name);
 			} else {
-				len = snprintk(&buf[used_buf_size], remaining_buf_size, "%s\n",
+				len = snprintk(&buf[used_buf_size], remaining_buf_size, "%s\r\n",
 					       entry.name);
 			}
 

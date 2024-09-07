@@ -491,6 +491,110 @@ static void broadcast_config_clear(void)
 	}
 }
 
+static void remove_cr_lf(char *str)
+{
+	char *p = str;
+
+	while (*p != '\0') {
+		if (*p == '\r' || *p == '\n') {
+			*p = '\0';
+			break;
+		}
+		p++;
+	}
+}
+
+/* Memory intensive but simple implementation */
+
+#define SD_FILECOUNT_MAX 80
+#define SD_PATHLEN_MAX	 100
+#define FOLDER_BUF_MAX	 200
+#define SD_LEVEL_MAX	 3
+static char sd_paths_and_files[SD_FILECOUNT_MAX][SD_PATHLEN_MAX] = {'\0'};
+uint32_t current_file_num;
+
+static int traverse_down(char *path, uint8_t level)
+{
+	int ret;
+	char tmp_file_buf[FOLDER_BUF_MAX] = {'\0'};
+	char *tmp_file_ptr = tmp_file_buf;
+	size_t buf_size = FOLDER_BUF_MAX;
+
+	if (path != NULL) {
+		LOG_WRN("entered level: %d Path is %s", level, path);
+	} else {
+		LOG_WRN("entered level: %d Path is NULL", level);
+	}
+
+	if (level > SD_LEVEL_MAX) {
+		LOG_WRN("At level %d, max level reached", level);
+		return 0;
+	}
+
+	ret = sd_card_list_files(path, tmp_file_buf, &buf_size, false);
+	if (ret == -ENOENT) {
+		/* Not able to open, hence likely not a folder */
+		return 0;
+	} else if (ret) {
+		return ret;
+	}
+
+	LOG_WRN("level %d tmp_file_buf is: %s", level, tmp_file_buf);
+
+	char *token = strtok_r(tmp_file_ptr, "\r\n", &tmp_file_ptr);
+
+	while (token != NULL) {
+		remove_cr_lf(token);
+		LOG_WRN("level %d, token is: %s.", level, token);
+		char fullPath[SD_PATHLEN_MAX] = {'\0'};
+
+		if (path != NULL) {
+			LOG_WRN("Adding %s to %s", path, fullPath);
+			remove_cr_lf(path);
+			strcat(fullPath, path);
+			strcat(fullPath, "/");
+		} else {
+			LOG_ERR("Path is NULL");
+		}
+		LOG_WRN("Adding %s to %s", token, fullPath);
+		strcat(fullPath, token);
+		LOG_WRN("Fullpath: %s", fullPath);
+
+		if (strstr(token, ".lc3") != NULL) {
+			strcpy(sd_paths_and_files[current_file_num], fullPath);
+			current_file_num++;
+			LOG_ERR("Added file num %d %s", current_file_num, fullPath);
+			if (current_file_num >= SD_FILECOUNT_MAX) {
+				LOG_WRN("Max file count reached");
+			}
+		} else {
+			ret = traverse_down(fullPath, level + 1);
+			if (ret) {
+				LOG_INF("going up. Traverse down failed");
+			}
+		}
+		token = strtok_r(NULL, "\n", &tmp_file_ptr);
+	}
+
+	LOG_INF("going up end of func from %d to %d", level, level - 1);
+	return 0;
+}
+
+static int sd_card_toc_gen(void)
+{
+	/* Traverse SD tree */
+	int ret;
+
+	ret = traverse_down(NULL, 0);
+	if (ret) {
+		return ret;
+	}
+
+	LOG_WRN("back from traverse down");
+
+	return 0;
+}
+
 int main(void)
 {
 	int ret;
@@ -517,6 +621,10 @@ int main(void)
 		LOG_ERR("Failed to initialize LC3 streamer: %d", ret);
 		return ret;
 	}
+
+	/*TODO: Should be within the lc3_streamer_module */
+	ret = sd_card_toc_gen();
+	ERR_CHK_MSG(ret, "Failed to generate SD card table");
 
 	memset(lc3_streamer_idx, LC3_STREAMER_INDEX_UNUSED, sizeof(lc3_streamer_idx));
 
@@ -2209,16 +2317,16 @@ SHELL_DYNAMIC_CMD_CREATE(folder_names, file_paths_get);
 static void file_paths_get(size_t idx, struct shell_static_entry *entry)
 {
 
-	int ret;
-	char buf[FILE_LIST_BUF_SIZE];
-	size_t buf_size = FILE_LIST_BUF_SIZE;
+	LOG_WRN("idx %d", idx);
 
-	/* ret = sd_card_list_files(NULL, buf, &buf_size, true); */
+	// ret = sd_card_list_files(NULL, buf, &buf_size, true);
 
 	if (idx == 0) {
 		entry->syntax = "AA/FF";
 	} else if (idx == 1) {
-		entry->syntax = "BB";
+		entry->syntax = "ABA";
+	} else if (idx == 2) {
+		entry->syntax = "ABC";
 	} else {
 		entry->syntax = NULL;
 	}
