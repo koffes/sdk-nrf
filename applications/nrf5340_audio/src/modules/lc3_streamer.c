@@ -163,7 +163,7 @@ static int stream_loop(struct lc3_stream *stream)
 
 	ret = lc3_file_open(&stream->file, stream->filename);
 	if (ret) {
-		LOG_ERR("Failed to open file %d", ret);
+		LOG_ERR("Failed to open file %s: %d", stream->filename, ret);
 		return ret;
 	}
 
@@ -309,6 +309,8 @@ int lc3_streamer_stream_register(const char *const filename, uint8_t *const stre
 		LOG_ERR("Failed to open file %d", ret);
 		return ret;
 	}
+
+	memset(streams[*streamer_idx].filename, '\0', sizeof(streams[*streamer_idx].filename));
 
 	strncpy(streams[*streamer_idx].filename, filename, strlen(filename));
 
