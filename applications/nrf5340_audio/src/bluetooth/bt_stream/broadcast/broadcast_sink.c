@@ -279,7 +279,7 @@ static bool base_subgroup_bis_cb(const struct bt_bap_base_subgroup_bis *bis, voi
 	bool single_bit = (chan_bitfield & (chan_bitfield - 1)) == 0;
 
 	if (single_bit) {
-		bis_index_bitfields[bis->index - 1] = BIT(bis->index);
+		bis_index_bitfields[bis->index - 1] = BIT(bis->index - 1);
 	} else {
 		LOG_WRN("More than one bit set in channel location, we only support 1 channel per "
 			"BIS");
