@@ -377,6 +377,8 @@ static bool base_subgroup_bis_cb(const struct bt_bap_base_subgroup_bis *bis, voi
 
 	if (single_bit) {
 		bis_index_bitfields[bis->index - 1] = BIT(bis->index - 1);
+	} else if (chan_bitfield == 0) {
+		LOG_WRN("No channels set in channel location BIS. Setting left");
 	} else {
 		LOG_WRN("More than one bit set in channel location, we only support 1 channel per "
 			"BIS");
@@ -520,8 +522,9 @@ static void syncable_cb(struct bt_bap_broadcast_sink *sink, const struct bt_iso_
 	}
 
 	if (bis_index_bitfields[active_stream_index] == 0) {
-		LOG_ERR("No bits set in bitfield");
-		return;
+		LOG_WRN("No bits set in bitfield. Setting left");
+		// return;
+		bis_index_bitfields[active_stream_index] = 1;
 	} else if (!IS_POWER_OF_TWO(bis_index_bitfields[active_stream_index])) {
 		/* Check that only one bit is set */
 		LOG_ERR("Application syncs to only one stream");
@@ -542,7 +545,7 @@ static void syncable_cb(struct bt_bap_broadcast_sink *sink, const struct bt_iso_
 		 */
 		if (!broadcast_code_received && biginfo->encryption == true &&
 		    sink->broadcast_id != prev_broadcast_id) {
-			LOG_WRN("Stream is encrypted, but haven not received broadcast code");
+			LOG_WRN("Stream is encrypted, but we have no broadcast code");
 			return;
 		}
 

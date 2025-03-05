@@ -600,7 +600,13 @@ int main(void)
 				per_adv_buf_cnt, false);
 	ERR_CHK_MSG(ret, "Failed to start first advertiser");
 
-	LOG_INF("Broadcast source: %s started", CONFIG_BT_AUDIO_BROADCAST_NAME);
+	if (IS_ENABLED(CONFIG_BT_AUDIO_BROADCAST_ENCRYPTED)) {
+		LOG_INF("Broadcast source: %s started. Encrypted: Key: %s",
+			CONFIG_BT_AUDIO_BROADCAST_NAME, CONFIG_BT_AUDIO_BROADCAST_ENCRYPTION_KEY);
+	} else {
+		LOG_INF("Broadcast source: %s started. Unencrypted",
+			CONFIG_BT_AUDIO_BROADCAST_NAME);
+	}
 
 	return 0;
 }

@@ -3,8 +3,9 @@
 [keybindings]
 [profiles]
   [[default]]
-    cursor_color = "#aaaaaa"
     scrollback_infinite = True
+    use_system_font = False
+    font = Monospace 22
 [layouts]
   [[default]]
     [[[child0]]]
@@ -14,7 +15,7 @@
       position = 72:35
       maximised = False
       fullscreen = False
-      size = 2000, 1000
+      size = 3000, 2000
       title = nRF5340 Audio DK
       last_active_window = True
     [[[child1]]]
@@ -28,7 +29,7 @@
       parent = child1
       order = 0
       position = 600
-      ratio = 0.5
+      ratio = 0.8
     [[[terminal3]]]
       type = Terminal
       parent = child2
@@ -40,19 +41,19 @@
       parent = child2
       order = 1
       profile = default
-      command = python3 scripts/open_terminator.py 1; sh
+      command = python3 scripts/open_terminator.py 2; sh
     [[[child5]]]
       type = HPaned
       parent = child1
       order = 1
       position = 600
-      ratio = 0.5
+      ratio = 0.8
     [[[terminal6]]]
       type = Terminal
       parent = child5
       order = 0
       profile = default
-      command = python3 scripts/open_terminator.py 2; sh
+      command = python3 scripts/open_terminator.py 1; sh
     [[[terminal7]]]
       type = Terminal
       parent = child5
