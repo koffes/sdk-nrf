@@ -6,6 +6,7 @@
 
 #include <zephyr/sys/slist.h>
 #include <zephyr/bluetooth/conn.h>
+#include <string.h>
 
 #include "server_store.h"
 #include "min_heap.h"
@@ -178,7 +179,6 @@ int srv_store_pres_dly_find(struct bt_bap_stream *stream, uint32_t *computed_pre
 
 	struct server_store *server = NULL;
 	for (int srv_idx = 0; srv_idx < server_heap.size; srv_idx++) {
-		LOG_ERR("HEAP SIZE %d", server_heap.size);
 
 		/* Across all servers, we need to first check if another stream is in the
 		 * same subgroup as the new incoming stream.
@@ -249,8 +249,6 @@ int srv_store_pres_dly_find(struct bt_bap_stream *stream, uint32_t *computed_pre
 			LOG_ERR("Unknown direction: %d", dir);
 			return -EINVAL;
 		};
-
-		return -EPERM;
 	}
 
 	if (group_reconfig_needed) {
@@ -360,15 +358,15 @@ int srv_store_from_stream_get(struct bt_cap_stream const *const stream,
 		for (int i = 0; i < CONFIG_BT_BAP_UNICAST_CLIENT_ASE_SNK_COUNT; i++) {
 			if (tmp_server->snk.cap_streams[i] == stream) {
 				*server = tmp_server;
-				LOG_DBG("Found server for sink stream at index %d", srv_idx);
+				LOG_DBG("Found server for sink stream %p at index %d", stream,
+					srv_idx);
 				matches++;
 			}
 		}
 		for (int i = 0; i < CONFIG_BT_BAP_UNICAST_CLIENT_ASE_SRC_COUNT; i++) {
 			if (tmp_server->src.cap_streams[i] == stream) {
 				*server = tmp_server;
-				LOG_DBG("Found server for source stream at index "
-					"%d",
+				LOG_DBG("Found server for source stream %p at index %d", stream,
 					srv_idx);
 				matches++;
 			}
@@ -491,6 +489,7 @@ int srv_store_num_get(void)
 int srv_store_add(struct bt_conn *conn)
 {
 	struct server_store server;
+	memset(&server, 0, sizeof(struct server_store));
 
 	server.conn = conn;
 	return min_heap_push(&server_heap, (void *)&server);
@@ -522,6 +521,8 @@ int srv_store_remove_all(void)
 		if (!min_heap_pop(&server_heap, (void *)&dummy_server)) {
 			return -EIO;
 		}
+
+		memset(&dummy_server, 0, sizeof(struct server_store));
 	}
 
 	return 0;
