@@ -83,8 +83,8 @@ LOG_MODULE_REGISTER(audio_datapath, CONFIG_AUDIO_DATAPATH_LOG_LEVEL);
 #define DRIFT_REGULATOR_DIV_FACTOR 2
 
 /* To allow BLE transmission and (host -> HCI -> controller) */
-#define JUST_IN_TIME_TARGET_DLY_US 3000
-#define JUST_IN_TIME_BOUND_US	   2500
+#define JUST_IN_TIME_TARGET_DLY_US 6000
+#define JUST_IN_TIME_BOUND_US	   5500
 
 /* How often to print under-run warning */
 #define LOG_INTERVAL_BLKS 5000

@@ -24,6 +24,7 @@ struct le_audio_tx_info {
  *
  * @note	Send all available channels in a single call.
  *		Do not call this for each channel.
+ *		For broadcast, all subgroups shall be sent at same time.
  *
  * @param[in]	audio_frame	Pointer to the encoded audio data.
  * @param[in]	tx		Pointer to an array of le_audio_tx_info elements.

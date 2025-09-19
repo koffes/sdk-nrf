@@ -223,7 +223,8 @@ int broadcast_source_id_get(uint8_t big_index, uint32_t *broadcast_id);
  * @brief	Broadcast the Bluetooth LE Audio data.
  *
  * @param[in]	audio_frame	Pointer to the audio buffer.
- * @param[in]	big_index	Index of the Broadcast Isochronous Group (BIG) to broadcast.
+ * @param[in]	big_index	Index of the Broadcast Isochronous Group (BIG) to broadcast. 0xFF =
+ * all.
  * @param[in]	subgroup_index	Index of the subgroup to broadcast.
  *
  * @return	0 for success, error otherwise.

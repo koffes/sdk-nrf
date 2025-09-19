@@ -224,6 +224,7 @@ int bt_le_audio_tx_send(struct net_buf const *const audio_frame, struct le_audio
 	uint32_t curr_ts_us = 0;
 	bool ts_common_acquired = false;
 	uint32_t common_interval = 0;
+	uint8_t common_group = 0xFF; /* CIG or BIG */
 
 	for (int i = 0; i < num_tx; i++) {
 		struct tx_inf *tx_info =
@@ -269,6 +270,12 @@ int bt_le_audio_tx_send(struct net_buf const *const audio_frame, struct le_audio
 		}
 		common_interval = tx[i].cap_stream->bap_stream.qos->interval;
 
+		if (common_group != 0xFF && (common_group != tx[i].idx.lvl1)) {
+			LOG_ERR("Not all channels are in the same group");
+			return -EINVAL;
+		}
+		common_group = tx[i].idx.lvl1;
+
 		/* Check if same audio is sent to all channels */
 		if (num_ch == 1) {
 			ret = iso_stream_send(audio_frame->data, data_size_pr_stream,
@@ -289,6 +296,11 @@ int bt_le_audio_tx_send(struct net_buf const *const audio_frame, struct le_audio
 
 		ret = iso_conn_handle_set(&tx[i].cap_stream->bap_stream, &tx_info->iso_conn_handle);
 		if (ret) {
+			continue;
+		}
+
+		/* Only concerned about the TX timestamp for subgroup 0*/
+		if (tx[i].idx.lvl2 != 0) {
 			continue;
 		}
 

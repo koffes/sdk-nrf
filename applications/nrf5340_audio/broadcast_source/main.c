@@ -25,7 +25,9 @@
 #include <zephyr/logging/log.h>
 LOG_MODULE_REGISTER(main, CONFIG_MAIN_LOG_LEVEL);
 
-BUILD_ASSERT(CONFIG_BT_AUDIO_CONCURRENT_TX_STREAMS_MAX <= CONFIG_AUDIO_ENCODE_CHANNELS_MAX);
+#if (CONFIG_BT_AUDIO_CONCURRENT_TX_STREAMS_MAX <= CONFIG_AUDIO_ENCODE_CHANNELS_MAX)
+#warning "Cannot encode enough streams. Data will be duplicated"
+#endif
 
 ZBUS_SUBSCRIBER_DEFINE(button_evt_sub, CONFIG_BUTTON_MSG_SUB_QUEUE_SIZE);
 
@@ -51,20 +53,34 @@ K_THREAD_STACK_DEFINE(le_audio_msg_sub_thread_stack, CONFIG_LE_AUDIO_MSG_SUB_STA
 
 static enum stream_state strm_state = STATE_PAUSED;
 
+/* Should scale with number of BIGs */
 /* Buffer for the UUIDs. */
 #define EXT_ADV_UUID_BUF_SIZE (128)
 NET_BUF_SIMPLE_DEFINE_STATIC(uuid_data, EXT_ADV_UUID_BUF_SIZE);
-NET_BUF_SIMPLE_DEFINE_STATIC(uuid_data2, EXT_ADV_UUID_BUF_SIZE);
 
 /* Buffer for periodic advertising BASE data. */
-NET_BUF_SIMPLE_DEFINE_STATIC(base_data, 128);
-NET_BUF_SIMPLE_DEFINE_STATIC(base_data2, 128);
+NET_BUF_SIMPLE_DEFINE_STATIC(base_data, 200);
 
 /* Extended advertising buffer. */
 static struct bt_data ext_adv_buf[CONFIG_BT_ISO_MAX_BIG][CONFIG_EXT_ADV_BUF_MAX];
 
 /* Periodic advertising buffer. */
 static struct bt_data per_adv_buf[CONFIG_BT_ISO_MAX_BIG];
+
+#define BIS_PER_SUBGROUP  2
+#define TOTAL_BIS_STREAMS (BIS_PER_SUBGROUP * CONFIG_BT_BAP_BROADCAST_SRC_SUBGROUP_COUNT)
+
+#if (TOTAL_BIS_STREAMS > CONFIG_BT_AUDIO_CONCURRENT_TX_STREAMS_MAX)
+#error "Not enough ISO TX streams available"
+#endif
+
+#if (TOTAL_BIS_STREAMS > CONFIG_BT_BAP_BROADCAST_SRC_STREAM_COUNT)
+#error "Not enough broadcastCONFIG_BT_BAP_BROADCAST_SRC_STREAM_COUNT"
+#endif
+
+#if (TOTAL_BIS_STREAMS > CONFIG_BT_ISO_MAX_CHAN)
+#error "Not enough ISO channels available"
+#endif
 
 #if (CONFIG_AURACAST)
 /* Total size of the PBA buffer includes the 16-bit UUID, 8-bit features and the
@@ -88,23 +104,18 @@ uint8_t pba_data[CONFIG_BT_ISO_MAX_BIG][BROADCAST_SRC_PBA_BUF_SIZE];
 static struct broadcast_source_ext_adv_data ext_adv_data[] = {
 	{.uuid_buf = &uuid_data,
 	 .pba_metadata_vacant_cnt = BROADCAST_SOURCE_PBA_METADATA_VACANT,
-	 .pba_buf = pba_data[0]},
-	{.uuid_buf = &uuid_data2,
-	 .pba_metadata_vacant_cnt = BROADCAST_SOURCE_PBA_METADATA_VACANT,
-	 .pba_buf = pba_data[1]}};
+	 .pba_buf = pba_data[0]}};
 #else
 /**
  * @brief	Broadcast source static extended advertising data.
  */
-static struct broadcast_source_ext_adv_data ext_adv_data[] = {{.uuid_buf = &uuid_data},
-							      {.uuid_buf = &uuid_data2}};
+static struct broadcast_source_ext_adv_data ext_adv_data[] = {{.uuid_buf = &uuid_data}};
 #endif /* (CONFIG_AURACAST) */
 
 /**
  * @brief	Broadcast source static periodic advertising data.
  */
-static struct broadcast_source_per_adv_data per_adv_data[] = {{.base_buf = &base_data},
-							      {.base_buf = &base_data2}};
+static struct broadcast_source_per_adv_data per_adv_data[] = {{.base_buf = &base_data}};
 
 /* Function for handling all stream state changes */
 static void stream_state_set(enum stream_state stream_state_new)
@@ -487,27 +498,43 @@ uint8_t stream_state_get(void)
 	return strm_state;
 }
 
+NET_BUF_POOL_DEFINE(single_pool, 1, 120, sizeof(struct audio_metadata), NULL);
+
 void streamctrl_send(struct net_buf const *const audio_frame)
 {
 	int ret;
-	static int prev_ret;
 
-	if (strm_state == STATE_STREAMING) {
+	if (strm_state != STATE_STREAMING) {
+		return;
+	}
+
+	/* Reduce the channel count to one, and this will duplicate on all ISO channels.*/
+	struct audio_metadata *meta = net_buf_user_data(audio_frame);
+	uint8_t num_ch = metadata_num_ch_get(meta);
+
+	if (TOTAL_BIS_STREAMS > 2 && num_ch == 2) {
+		struct net_buf *single_channel;
+
+		single_channel = net_buf_alloc(&single_pool, K_NO_WAIT);
+		meta->locations = 0x1; /* Only use channel 0 */
+
+		/* net_buf_add_mem(single_channel, temp_mem, audio_frame->len / 2); */
+		net_buf_add_mem(single_channel, audio_frame->data, audio_frame->len / 2);
+		net_buf_user_data_copy(single_channel, audio_frame);
+
+		ret = broadcast_source_send(single_channel, 0, 0xFF);
+		net_buf_unref(single_channel);
+	} else {
 		ret = broadcast_source_send(audio_frame, 0, 0);
+	}
 
-		if (ret != 0 && ret != prev_ret) {
-			if (ret == -ECANCELED) {
-				LOG_WRN("Sending operation cancelled");
-			} else {
-				LOG_WRN("Problem with sending LE audio data, ret: %d", ret);
-			}
-		}
-
-		prev_ret = ret;
+	if (ret == -ECANCELED) {
+		LOG_WRN_RATELIMIT_RATE(1000, "Sending operation cancelled");
+	} else if (ret) {
+		LOG_WRN_RATELIMIT_RATE(1000, "Problem with sending LE audio data, ret: %d", ret);
 	}
 }
 
-#if CONFIG_CUSTOM_BROADCASTER
 /* Example of how to create a custom broadcaster */
 /**
  * Remember to increase:
@@ -517,47 +544,64 @@ void streamctrl_send(struct net_buf const *const audio_frame)
  * CONFIG_BT_BAP_BROADCAST_SRC_STREAM_COUNT
  * CONFIG_BT_ISO_MAX_CHAN
  */
-#error Feature is incomplete and should only be used as a guideline for now
-static struct bt_bap_lc3_preset lc3_preset_48 = BT_BAP_LC3_BROADCAST_PRESET_48_4_1(
-	BT_AUDIO_LOCATION_FRONT_LEFT | BT_AUDIO_LOCATION_FRONT_RIGHT, BT_AUDIO_CONTEXT_TYPE_MEDIA);
+
+/* TODO: CHANGE*/
+static struct bt_bap_lc3_preset lc3_preset = BT_BAP_LC3_BROADCAST_PRESET_NRF5340_AUDIO;
 
 static void broadcast_create(struct broadcast_source_big *broadcast_param)
 {
-	static enum bt_audio_location location[2] = {BT_AUDIO_LOCATION_FRONT_LEFT,
-						     BT_AUDIO_LOCATION_FRONT_RIGHT};
-	static struct subgroup_config subgroups[2];
+	int ret;
+	static enum bt_audio_location location[BIS_PER_SUBGROUP];
+	static struct subgroup_config subgroups[CONFIG_BT_BAP_BROADCAST_SRC_SUBGROUP_COUNT];
 
-	subgroups[0].group_lc3_preset = lc3_preset_48;
-	subgroups[0].num_bises = 2;
-	subgroups[0].context = BT_AUDIO_CONTEXT_TYPE_MEDIA;
-	subgroups[0].location = location;
+	/* Application specific. Will set incremental location for each BIS in the subgroup. */
+	for (int i = 0; i < BIS_PER_SUBGROUP; i++) {
+		location[i] = 1 << i;
+	}
 
-	subgroups[1].group_lc3_preset = lc3_preset_48;
-	subgroups[1].num_bises = 2;
-	subgroups[1].context = BT_AUDIO_CONTEXT_TYPE_MEDIA;
-	subgroups[1].location = location;
+	for (int j = 0; j < CONFIG_BT_BAP_BROADCAST_SRC_SUBGROUP_COUNT; j++) {
+		LOG_INF("Subgroup %d", j);
+		subgroups[j].group_lc3_preset = lc3_preset;
+		subgroups[j].num_bises = BIS_PER_SUBGROUP;
+		subgroups[j].context = BT_AUDIO_CONTEXT_TYPE_MEDIA;
+		subgroups[j].location = location;
+		ret = bt_audio_codec_cfg_meta_set_lang(&subgroups[j].group_lc3_preset.codec_cfg,
+						       "eng");
+		if (ret < 0) {
+			LOG_ERR("Failed to set language: %d", ret);
+		}
 
-	broadcast_param->packing = BT_ISO_PACKING_INTERLEAVED;
-
-	broadcast_param->encryption = false;
-
-	bt_audio_codec_cfg_meta_set_bcast_audio_immediate_rend_flag(
-		&subgroups[0].group_lc3_preset.codec_cfg);
-	bt_audio_codec_cfg_meta_set_bcast_audio_immediate_rend_flag(
-		&subgroups[1].group_lc3_preset.codec_cfg);
-
-	uint8_t spanish_src[3] = "spa";
-	uint8_t english_src[3] = "eng";
-
-	bt_audio_codec_cfg_meta_set_stream_lang(&subgroups[0].group_lc3_preset.codec_cfg,
-						(uint32_t)sys_get_le24(english_src));
-	bt_audio_codec_cfg_meta_set_stream_lang(&subgroups[1].group_lc3_preset.codec_cfg,
-						(uint32_t)sys_get_le24(spanish_src));
+		if (IS_ENABLED(CONFIG_BT_AUDIO_BROADCAST_IMMEDIATE_FLAG)) {
+			bt_audio_codec_cfg_meta_set_bcast_audio_immediate_rend_flag(
+				&subgroups[j].group_lc3_preset.codec_cfg);
+		}
+	}
 
 	broadcast_param->subgroups = subgroups;
-	broadcast_param->num_subgroups = 2;
+	broadcast_param->num_subgroups = CONFIG_BT_BAP_BROADCAST_SRC_SUBGROUP_COUNT;
+	broadcast_param->packing = BT_ISO_PACKING_INTERLEAVED;
+
+	if (IS_ENABLED(CONFIG_BT_AUDIO_PACKING_INTERLEAVED)) {
+		broadcast_param->packing = BT_ISO_PACKING_INTERLEAVED;
+	} else {
+		broadcast_param->packing = BT_ISO_PACKING_SEQUENTIAL;
+	}
+
+	if (IS_ENABLED(CONFIG_BT_AUDIO_BROADCAST_ENCRYPTED)) {
+		broadcast_param->encryption = true;
+		memset(broadcast_param->broadcast_code, 0, sizeof(broadcast_param->broadcast_code));
+		memcpy(broadcast_param->broadcast_code, CONFIG_BT_AUDIO_BROADCAST_ENCRYPTION_KEY,
+		       MIN(sizeof(CONFIG_BT_AUDIO_BROADCAST_ENCRYPTION_KEY),
+			   sizeof(broadcast_param->broadcast_code)));
+	} else {
+		broadcast_param->encryption = false;
+	}
+
+	memcpy(broadcast_param->broadcast_name, CONFIG_BT_AUDIO_BROADCAST_NAME,
+	       sizeof(CONFIG_BT_AUDIO_BROADCAST_NAME));
+
+	LOG_INF("done");
 }
-#endif /* CONFIG_CUSTOM_BROADCASTER */
 
 int main(void)
 {
@@ -587,7 +631,7 @@ int main(void)
 	ret = zbus_link_producers_observers();
 	ERR_CHK_MSG(ret, "Failed to link zbus producers and observers");
 
-	broadcast_source_default_create(&broadcast_param);
+	broadcast_create(&broadcast_param);
 
 	/* Only one BIG supported at the moment */
 	ret = broadcast_source_enable(&broadcast_param, 0);

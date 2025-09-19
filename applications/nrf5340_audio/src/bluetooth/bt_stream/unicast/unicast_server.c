@@ -634,7 +634,7 @@ int unicast_server_send(struct net_buf const *const audio_frame)
 		num_active_streams++;
 	}
 
-	ret = bt_le_audio_tx_send(audio_frame, tx, num_active_streams);
+	ret = bt_le_audio_tx_send(audio_frame, tx, num_active_streams, false);
 	if (ret) {
 		return ret;
 	}

@@ -418,8 +418,10 @@ static int create_param_produce(uint8_t big_index,
 	}
 
 	static struct bt_cap_initiator_broadcast_stream_param
-		stream_params[CONFIG_BT_BAP_BROADCAST_SRC_SUBGROUP_COUNT][2];
-	static uint8_t bis_codec_data[CONFIG_BT_BAP_BROADCAST_SRC_SUBGROUP_COUNT][2]
+		stream_params[CONFIG_BT_BAP_BROADCAST_SRC_SUBGROUP_COUNT]
+			     [CONFIG_BT_BAP_BROADCAST_SRC_STREAM_COUNT];
+	static uint8_t bis_codec_data[CONFIG_BT_BAP_BROADCAST_SRC_SUBGROUP_COUNT]
+				     [CONFIG_BT_BAP_BROADCAST_SRC_STREAM_COUNT]
 				     [LTV_CHAN_ALLOC_SIZE];
 	static struct bt_cap_initiator_broadcast_subgroup_param
 		subgroup_params[CONFIG_BT_BAP_BROADCAST_SRC_SUBGROUP_COUNT];
@@ -619,6 +621,11 @@ int broadcast_source_id_get(uint8_t big_index, uint32_t *broadcast_id)
 	return 0;
 }
 
+#define BIS_PER_SUBGROUP  2
+#define TOTAL_BIS_STREAMS (BIS_PER_SUBGROUP * CONFIG_BT_BAP_BROADCAST_SRC_SUBGROUP_COUNT)
+
+/* This code must be called only once */
+
 int broadcast_source_send(struct net_buf const *const audio_frame, uint8_t big_index,
 			  uint8_t subgroup_index)
 {
@@ -630,40 +637,52 @@ int broadcast_source_send(struct net_buf const *const audio_frame, uint8_t big_i
 		return -EINVAL;
 	}
 
+	if (audio_frame->len == 0) {
+		LOG_ERR("No audio data given");
+		return -EPERM;
+	}
+
 	struct le_audio_tx_info
 		tx[CONFIG_BT_ISO_MAX_CHAN * CONFIG_BT_BAP_BROADCAST_SRC_SUBGROUP_COUNT];
-
-	for (int i = 0; i < ARRAY_SIZE(cap_streams[big_index][subgroup_index]); i++) {
-		if (!le_audio_ep_state_check(
-			    cap_streams[big_index][subgroup_index][i].bap_stream.ep,
-			    BT_BAP_EP_STATE_STREAMING)) {
-			/* Skip streams not in a streaming state */
+	for (int subgr = 0; subgr < CONFIG_BT_BAP_BROADCAST_SRC_SUBGROUP_COUNT; subgr++) {
+		if ((subgr != subgroup_index) && (subgroup_index != 0xFF)) {
+			/* Skip this subgroup */
 			continue;
 		}
 
-		/* Set cap stream pointer */
-		tx[num_active_streams].cap_stream = &cap_streams[big_index][subgroup_index][i];
+		for (int i = 0; i < BIS_PER_SUBGROUP; i++) {
+			if (!le_audio_ep_state_check(cap_streams[big_index][subgr][i].bap_stream.ep,
+						     BT_BAP_EP_STATE_STREAMING)) {
+				/* Skip streams not in a streaming state */
+				continue;
+			}
 
-		/* Set index */
-		tx[num_active_streams].idx.lvl1 = big_index;
-		tx[num_active_streams].idx.lvl2 = subgroup_index;
-		tx[num_active_streams].idx.lvl3 = i;
+			/* Set cap stream pointer */
+			tx[num_active_streams].cap_stream = &cap_streams[big_index][subgr][i];
 
-		/* Set channel location */
-		/* TODO: Use the function below once
-		 * https://github.com/zephyrproject-rtos/zephyr/pull/72908 is merged
-		 */
-		/* tx[num_active_streams].audio_channel = audio_map_location_get(stream);*/
-		tx[num_active_streams].audio_channel = i;
+			/* Set index */
+			tx[num_active_streams].idx.lvl1 = big_index;
+			tx[num_active_streams].idx.lvl2 = subgr;
+			tx[num_active_streams].idx.lvl3 = i;
 
-		num_active_streams++;
+			/* Set channel location
+			 * TODO: Use the function below once
+			 * https://github.com/zephyrproject-rtos/zephyr/pull/72908 is merged
+			 *
+			 * tx[num_active_streams].audio_channel =
+			 * audio_map_location_get(stream);
+			 */
+			tx[num_active_streams].audio_channel = 1;
+
+			num_active_streams++;
+		}
 	}
 
 	if (num_active_streams == 0) {
 		LOG_WRN("No active streams");
 		return -ECANCELED;
 	}
-
+	/* We need to copy before this to send data to all channels.*/
 	ret = bt_le_audio_tx_send(audio_frame, tx, num_active_streams);
 	if (ret) {
 		return ret;
@@ -783,6 +802,8 @@ void broadcast_started_cb(struct bt_cap_broadcast_source *source)
 		LOG_ERR("Failed to get broadcast ID: %d", ret);
 		return;
 	}
+
+	/* Add check for RTN match as set. */
 
 	LOG_INF("Source %p started", (void *)source);
 	LOG_INF("\tIndex: %u", idx);
