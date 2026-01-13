@@ -41,6 +41,10 @@
 #include <pcm_mix.h>
 #include "lc3.h"
 #include <zephyr/drivers/gpio.h>
+
+#include <zephyr/logging/log.h>
+LOG_MODULE_REGISTER(unicast_server, 3);
+
 static const struct device *gpio;
 
 #include "nrf54l15.h"
@@ -163,6 +167,7 @@ static void i2s_comp_handler(nrfx_i2s_buffers_t const *released_bufs, uint32_t s
 					   I2S_SAMPLES_NUM * 2 * sizeof(uint16_t));
 			if (ret != 192) {
 				memset(i2s_tx_buf_a, 0, 192);
+				LOG_WRN("Underrun on buf A");
 			}
 			audio_i2s_set_next_buf((const uint8_t *)i2s_tx_buf_a,
 					       (uint32_t *)i2s_rx_buf_a);
@@ -171,6 +176,7 @@ static void i2s_comp_handler(nrfx_i2s_buffers_t const *released_bufs, uint32_t s
 					   I2S_SAMPLES_NUM * 2 * sizeof(uint16_t));
 			if (ret != 192) {
 				memset(i2s_tx_buf_b, 0, 192);
+				LOG_WRN("Underrun on buf B");
 			}
 			audio_i2s_set_next_buf((const uint8_t *)i2s_tx_buf_b,
 					       (uint32_t *)i2s_rx_buf_b);
@@ -252,7 +258,7 @@ static int clocks_start(void)
 	return 0;
 }
 
-void dac_i2c_write(const struct i2c_dt_spec *dev_i2c, uint8_t reg, uint8_t value)
+int dac_i2c_write(const struct i2c_dt_spec *dev_i2c, uint8_t reg, uint8_t value)
 {
 	int ret;
 	uint8_t config[2] = {reg, value};
@@ -260,6 +266,7 @@ void dac_i2c_write(const struct i2c_dt_spec *dev_i2c, uint8_t reg, uint8_t value
 	ret = i2c_write_dt(dev_i2c, config, sizeof(config));
 	if (ret != 0) {
 		printf("Failed to write to I2C device address %x at reg. %x\n", dev_i2c->addr, reg);
+		return ret;
 	} else {
 		// printf("I2C device address %x at reg. %x written successfully\n", dev_i2c->addr,
 		//        reg);
@@ -279,52 +286,55 @@ void tlv320_setup(void)
 		printf("I2C bus %s is ready!\n", dev_i2c.bus->name);
 	}
 
-	dac_i2c_write(&dev_i2c, 0x00, 0x00);
+	int ret = dac_i2c_write(&dev_i2c, 0x00, 0x00);
+	if (ret != 0) {
+		LOG_WRN("Failed to write to DAC. Skipping rest \n");
+	} else {
 
-	dac_i2c_write(&dev_i2c, 0x01, 0x01);
-	k_sleep(K_MSEC(10));
+		dac_i2c_write(&dev_i2c, 0x01, 0x01);
+		k_sleep(K_MSEC(10));
 
-	dac_i2c_write(&dev_i2c, 0x04, 0x03 | (0b11 << 0));
-	dac_i2c_write(&dev_i2c, 0x05, (0b001 << 4) | (0b0001 << 0));
-	dac_i2c_write(&dev_i2c, 0x06, 0x05);
-	dac_i2c_write(&dev_i2c, 0x07, 0x0E);
-	dac_i2c_write(&dev_i2c, 0x08, 0xB0);
+		dac_i2c_write(&dev_i2c, 0x04, 0x03 | (0b11 << 0));
+		dac_i2c_write(&dev_i2c, 0x05, (0b001 << 4) | (0b0001 << 0));
+		dac_i2c_write(&dev_i2c, 0x06, 0x05);
+		dac_i2c_write(&dev_i2c, 0x07, 0x0E);
+		dac_i2c_write(&dev_i2c, 0x08, 0xB0);
 
-	dac_i2c_write(&dev_i2c, 0x05, (1 << 7) | (0b001 << 4) | (0b0001 << 0));
-	k_sleep(K_MSEC(15));
+		dac_i2c_write(&dev_i2c, 0x05, (1 << 7) | (0b001 << 4) | (0b0001 << 0));
+		k_sleep(K_MSEC(15));
 
-	dac_i2c_write(&dev_i2c, 0x0B, 0x87);
-	dac_i2c_write(&dev_i2c, 0x0C, 0x82);
-	dac_i2c_write(&dev_i2c, 0x0D, 0x00);
-	dac_i2c_write(&dev_i2c, 0x0E, 0x80);
+		dac_i2c_write(&dev_i2c, 0x0B, 0x87);
+		dac_i2c_write(&dev_i2c, 0x0C, 0x82);
+		dac_i2c_write(&dev_i2c, 0x0D, 0x00);
+		dac_i2c_write(&dev_i2c, 0x0E, 0x80);
 
-	dac_i2c_write(&dev_i2c, 0x1B, 0x0C);
-	dac_i2c_write(&dev_i2c, 0x1E, 0x84);
-	dac_i2c_write(&dev_i2c, 0x1D, (0b01 << 0));
-	dac_i2c_write(&dev_i2c, 0x3C, 0x01);
-	dac_i2c_write(&dev_i2c, 0x74, 0x00);
+		dac_i2c_write(&dev_i2c, 0x1B, 0x0C);
+		dac_i2c_write(&dev_i2c, 0x1E, 0x84);
+		dac_i2c_write(&dev_i2c, 0x1D, (0b01 << 0));
+		dac_i2c_write(&dev_i2c, 0x3C, 0x01);
+		dac_i2c_write(&dev_i2c, 0x74, 0x00);
 
-	dac_i2c_write(&dev_i2c, 0x00, 0x01);
-	dac_i2c_write(&dev_i2c, 0x1F, (0b00 << 3));
-	dac_i2c_write(&dev_i2c, 0x21, (0b0111 << 3) | (0b11 << 1));
-	dac_i2c_write(&dev_i2c, 0x23, 0x44);
-	dac_i2c_write(&dev_i2c, 0x24, 0x80);
-	dac_i2c_write(&dev_i2c, 0x25, 0x80);
-	dac_i2c_write(&dev_i2c, 0x28, 0x06);
-	dac_i2c_write(&dev_i2c, 0x29, 0x06);
-	dac_i2c_write(&dev_i2c, 0x1F, 0xC0 | (0b00 << 3));
-	// dac_i2c_write(&dev_i2c, 0x20, 0x80);
+		dac_i2c_write(&dev_i2c, 0x00, 0x01);
+		dac_i2c_write(&dev_i2c, 0x1F, (0b00 << 3));
+		dac_i2c_write(&dev_i2c, 0x21, (0b0111 << 3) | (0b11 << 1));
+		dac_i2c_write(&dev_i2c, 0x23, 0x44);
+		dac_i2c_write(&dev_i2c, 0x24, 0x80);
+		dac_i2c_write(&dev_i2c, 0x25, 0x80);
+		dac_i2c_write(&dev_i2c, 0x28, 0x06);
+		dac_i2c_write(&dev_i2c, 0x29, 0x06);
+		dac_i2c_write(&dev_i2c, 0x1F, 0xC0 | (0b00 << 3));
+		// dac_i2c_write(&dev_i2c, 0x20, 0x80);
 
-	k_sleep(K_MSEC(300));
+		k_sleep(K_MSEC(300));
 
-	dac_i2c_write(&dev_i2c, 0x00, 0x00);
-	dac_i2c_write(&dev_i2c, 0x3F, 0xD4);
-	dac_i2c_write(&dev_i2c, 0x41, volume);
-	dac_i2c_write(&dev_i2c, 0x42, volume);
-	dac_i2c_write(&dev_i2c, 0x40, 0x00);
-	dac_i2c_write(&dev_i2c, 0x00, 0x00);
+		dac_i2c_write(&dev_i2c, 0x00, 0x00);
+		dac_i2c_write(&dev_i2c, 0x3F, 0xD4);
+		dac_i2c_write(&dev_i2c, 0x41, volume);
+		dac_i2c_write(&dev_i2c, 0x42, volume);
+		dac_i2c_write(&dev_i2c, 0x40, 0x00);
+		dac_i2c_write(&dev_i2c, 0x00, 0x00);
+	}
 }
-
 
 uint8_t stream_num_get(struct bt_bap_stream * stream)
 {
@@ -513,30 +523,30 @@ static void stream_recv_cb(struct bt_bap_stream *bap_stream, const struct bt_iso
 
 			int16_t audio_buf_test[2 * 480];
 			// LOG_INF("RX stream %p len %u", stream, buf->len);
-			uint16_t buf_size;
+			uint16_t buf_space;
 			static uint16_t prev_buf_size = 0;
 
-			buf_size = ring_buf_space_get(&i2s_tx_ring_buf);
-			if (buf_size != prev_buf_size) {
-				prev_buf_size = buf_size;
-				//LOG_INF("I2S TX ring buffer space: %d bytes", buf_size);
-				uint16_t buf_size_percent = buf_size * 100 / (I2S_SAMPLES_NUM * 2 * sizeof(uint16_t) * BUFFER_SPACE);
-				//LOG_INF("%d", buf_size_percent);
-				//printk("%d\n", buf_size_percent);
-				
-				if (buf_size_percent < 45) {
-					dac_i2c_write(&dev_i2c, 0x07, 0x0E); // D[13:8] for D=3760
-					dac_i2c_write(&dev_i2c, 0x08, 0xDA); // D[7:0] for D=3760
-				} else if (buf_size_percent >= 40 && buf_size_percent <= 55) {
-					dac_i2c_write(&dev_i2c, 0x07, 0x0E); // D[13:8] for D=3760
-					dac_i2c_write(&dev_i2c, 0x08, 0xB0); // D[7:0] for D=3760
-				} else {
-					dac_i2c_write(&dev_i2c, 0x07, 0x0E); // D[13:8] for D=3760
-					dac_i2c_write(&dev_i2c, 0x08, 0x86); // D[7:0] for D=3760
-				}
-				
-			}
+			buf_space = ring_buf_space_get(&i2s_tx_ring_buf);
 
+			prev_buf_size = buf_space;
+			uint16_t buf_size_percent =
+				buf_space * 100 /
+				(I2S_SAMPLES_NUM * 2 * sizeof(uint16_t) * BUFFER_SPACE);
+			LOG_INF_RATELIMIT_RATE(200, "Space: %d bytes %d fill percent", buf_space,
+					       100 - buf_size_percent);
+			// LOG_INF("%d", );
+			// printk("%d\n", buf_size_percent);
+
+			// if (buf_size_percent < 45) {
+			//	dac_i2c_write(&dev_i2c, 0x07, 0x0E); // D[13:8] for D=3760
+			//	dac_i2c_write(&dev_i2c, 0x08, 0xDA); // D[7:0] for D=3760
+			// } else if (buf_size_percent >= 40 && buf_size_percent <= 55) {
+			//	dac_i2c_write(&dev_i2c, 0x07, 0x0E); // D[13:8] for D=3760
+			//	dac_i2c_write(&dev_i2c, 0x08, 0xB0); // D[7:0] for D=3760
+			// } else {
+			//	dac_i2c_write(&dev_i2c, 0x07, 0x0E); // D[13:8] for D=3760
+			//	dac_i2c_write(&dev_i2c, 0x08, 0x86); // D[7:0] for D=3760
+			// }
 
 			int err;
 			err = lc3_decode(
@@ -548,8 +558,11 @@ static void stream_recv_cb(struct bt_bap_stream *bap_stream, const struct bt_iso
 				pkt_info_r.bad_frame ? NULL : pkt_info_r.buf,
 				pkt_info_r.size, LC3_PCM_FORMAT_S16, audio_buf_test + 1, 2);
 
-			ring_buf_put(&i2s_tx_ring_buf, (uint8_t *)audio_buf_test, 480 * 2 * sizeof(int16_t));
-
+			int ret = ring_buf_put(&i2s_tx_ring_buf, (uint8_t *)audio_buf_test,
+					       480 * 2 * sizeof(int16_t));
+			if (ret != 480 * 2 * sizeof(int16_t)) {
+				LOG_WRN("Ring buf overrun:");
+			}
 		}
 	}
 	//printk("%p, %d, %d\n", (void *)bap_stream, stream_num_get(bap_stream),info->ts);
