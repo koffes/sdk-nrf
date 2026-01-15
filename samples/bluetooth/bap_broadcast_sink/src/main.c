@@ -288,51 +288,57 @@ void tlv320_setup(void)
 
 	int ret = dac_i2c_write(&dev_i2c, 0x00, 0x00);
 	if (ret != 0) {
-		LOG_WRN("Failed to write to DAC. Skipping rest \n");
+		LOG_WRN("Failed to write to HW codec. Skipping rest");
 	} else {
 
 		dac_i2c_write(&dev_i2c, 0x01, 0x01);
 		k_sleep(K_MSEC(10));
 
-		dac_i2c_write(&dev_i2c, 0x04, 0x03 | (0b11 << 0));
-		dac_i2c_write(&dev_i2c, 0x05, (0b001 << 4) | (0b0001 << 0));
-		dac_i2c_write(&dev_i2c, 0x06, 0x05);
-		dac_i2c_write(&dev_i2c, 0x07, 0x0E);
-		dac_i2c_write(&dev_i2c, 0x08, 0xB0);
+		dac_i2c_write(&dev_i2c, 0x02, 0x09); // Wake up with AVDD > 2v and all VDDIO level
+		dac_i2c_write(&dev_i2c, 0x0f, 0x60); // Setting GPI1 as CCLK
+		dac_i2c_write(&dev_i2c, 0x0d, 0x02); // Setting GPI1 as input
+		dac_i2c_write(&dev_i2c, 0x28, 0x20); // ch1 left slot 0 NEWNEWNEW
+		dac_i2c_write(&dev_i2c, 0x29, 0x30); // ch2 right slot 0 NEWNEWNEW
+		dac_i2c_write(&dev_i2c, 0x1a, 0x40); // i2s mode, 16 bit
+		dac_i2c_write(&dev_i2c, 0x1e, 0x20); // ch1 is left slot 0
+		dac_i2c_write(&dev_i2c, 0x1f, 0x30); // ch2 is right slot 0
+		dac_i2c_write(&dev_i2c, 0x32,
+			      0x51); // fs bin=20, 1% tolerance, custom clock configuration
+		dac_i2c_write(&dev_i2c, 0x34, 0x48); // PLL enabled, fraction mode enabled, fixed
+						     // CCLK is input clock source
+		dac_i2c_write(&dev_i2c, 0x37,
+			      0x70); // PASI/SASI in controller configuration, 16mhz cclk, 48k sr
 
-		dac_i2c_write(&dev_i2c, 0x05, (1 << 7) | (0b001 << 4) | (0b0001 << 0));
-		k_sleep(K_MSEC(15));
+		dac_i2c_write(&dev_i2c, 0x38, 0x80); // INTERNAL BCLK FOR FSYNC GENERATION, BCLK to
+						     // FSYNC ratio is 32 msb=0
+		dac_i2c_write(&dev_i2c, 0x39,
+			      0x20); // lsb for bclk to fsync ratio = 32 (16 bit word length)
 
-		dac_i2c_write(&dev_i2c, 0x0B, 0x87);
-		dac_i2c_write(&dev_i2c, 0x0C, 0x82);
-		dac_i2c_write(&dev_i2c, 0x0D, 0x00);
-		dac_i2c_write(&dev_i2c, 0x0E, 0x80);
+		dac_i2c_write(&dev_i2c, 0x0c, 0xb1); // PLL out for debugging
+		dac_i2c_write(&dev_i2c, 0x64,
+			      0x28); // Configure OUT1P as mono single ended from DAC1
+		dac_i2c_write(&dev_i2c, 0x65, 0x60); // Configure OUT1P HP 0dB audio band
+		dac_i2c_write(&dev_i2c, 0x66, 0x60); // Configure OUT1M HP 0dB 2Vrms differential
+		dac_i2c_write(&dev_i2c, 0x6b,
+			      0x28); // Configure OUT2P as mono single ended from DAC2
+		dac_i2c_write(&dev_i2c, 0x6c, 0x60); // Configure OUT2P HP 0dB audio band
+		dac_i2c_write(&dev_i2c, 0x6d, 0x60); // Configure OUT2M HP 0dB 2Vrms Differential
 
-		dac_i2c_write(&dev_i2c, 0x1B, 0x0C);
-		dac_i2c_write(&dev_i2c, 0x1E, 0x84);
-		dac_i2c_write(&dev_i2c, 0x1D, (0b01 << 0));
-		dac_i2c_write(&dev_i2c, 0x3C, 0x01);
-		dac_i2c_write(&dev_i2c, 0x74, 0x00);
+		dac_i2c_write(&dev_i2c, 0x76, 0xcc); // enable in and output ch1 and 2 NEWNEWNEW
+		dac_i2c_write(&dev_i2c, 0x78, 0xc0); // adc and dac powered up NEWNEWNEW
+		dac_i2c_write(&dev_i2c, 0x32, 0x50); // Set to 48k and auto
 
-		dac_i2c_write(&dev_i2c, 0x00, 0x01);
-		dac_i2c_write(&dev_i2c, 0x1F, (0b00 << 3));
-		dac_i2c_write(&dev_i2c, 0x21, (0b0111 << 3) | (0b11 << 1));
-		dac_i2c_write(&dev_i2c, 0x23, 0x44);
-		dac_i2c_write(&dev_i2c, 0x24, 0x80);
-		dac_i2c_write(&dev_i2c, 0x25, 0x80);
-		dac_i2c_write(&dev_i2c, 0x28, 0x06);
-		dac_i2c_write(&dev_i2c, 0x29, 0x06);
-		dac_i2c_write(&dev_i2c, 0x1F, 0xC0 | (0b00 << 3));
-		// dac_i2c_write(&dev_i2c, 0x20, 0x80);
+		dac_i2c_write(&dev_i2c, 0x00, 0x03); // page 3
 
-		k_sleep(K_MSEC(300));
+		dac_i2c_write(&dev_i2c, 0x32,
+			      0xa8); // 1010 1000 //PLL_PDIV_IN_CLK is CCLK, and PASI BCLK divider
+				     // source is DSP clock (NDIV?) NEWNEWNEW - strange
 
-		dac_i2c_write(&dev_i2c, 0x00, 0x00);
-		dac_i2c_write(&dev_i2c, 0x3F, 0xD4);
-		dac_i2c_write(&dev_i2c, 0x41, volume);
-		dac_i2c_write(&dev_i2c, 0x42, volume);
-		dac_i2c_write(&dev_i2c, 0x40, 0x00);
-		dac_i2c_write(&dev_i2c, 0x00, 0x00);
+		dac_i2c_write(&dev_i2c, 0x34, 0x10); //(default) NM div input clock is PLL output
+
+		dac_i2c_write(&dev_i2c, 0x44, 0x06); // NDIV and MDIV enabled
+		dac_i2c_write(&dev_i2c, 0x45,
+			      0x5a); // MODCLK, PASI BDIV, and PASI FSYNC DIV enabled
 	}
 }
 
@@ -561,7 +567,7 @@ static void stream_recv_cb(struct bt_bap_stream *bap_stream, const struct bt_iso
 			int ret = ring_buf_put(&i2s_tx_ring_buf, (uint8_t *)audio_buf_test,
 					       480 * 2 * sizeof(int16_t));
 			if (ret != 480 * 2 * sizeof(int16_t)) {
-				LOG_WRN("Ring buf overrun:");
+				LOG_WRN_RATELIMIT_RATE(1000, "Ring buf overrun:");
 			}
 		}
 	}

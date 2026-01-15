@@ -70,9 +70,9 @@
 	pinctrl-0 = <&i2c21_default_alt>;
 	pinctrl-1 = <&i2c21_sleep_alt>;
 	pinctrl-names = "default", "sleep";
-	tlv320: tlv320@18 {
+	tlv320: tlv320@50 {
         compatible = "i2c-device";
         status = "okay";
-		reg = <0x18>;
+		reg = <0x50>;
 	};
 };
