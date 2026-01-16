@@ -276,7 +276,7 @@ static const struct i2c_dt_spec dev_i2c = I2C_DT_SPEC_GET(I2C_NODE);
 #define DEFAULT_VOLUME -60
 #define VOLUME_STEP 5
 static int8_t volume = DEFAULT_VOLUME;
-void tlv320_setup(void)
+void tac5112_setup(void)
 {
 
 	if (!device_is_ready(dev_i2c.bus)) {
@@ -1588,7 +1588,7 @@ int main(void)
     k_sleep(K_MSEC(200));     // Wait for reset to take effect
     gpio_pin_set_raw(gpio, 2, 1);
 
-	tlv320_setup();
+	tac5112_setup();
 
 	audio_i2s_init();
 
