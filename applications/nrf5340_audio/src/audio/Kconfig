@@ -275,6 +275,26 @@ config BUF_BLE_RX_PACKET_NUM
 	  Two is recommended minimum to reduce the likelyhood of audio
 	  gaps due to BLE retransmits.
 
+config LE_AUDIO_RX_BUFFER_CHANNELS_MAX
+	int "Maximum number of channels handled by the RX pairing buffer"
+	default 10
+	range 1 10
+	help
+	  Sets the maximum number of independent channel streams that the
+	  RX pairing buffer can track simultaneously.  Each channel occupies
+	  up to (LE_AUDIO_RX_BUFFERED_PACKETS_PER_CHANNEL + 1) slots.
+
+config LE_AUDIO_RX_BUFFERED_PACKETS_PER_CHANNEL
+	int "Per-channel packet buffer depth for RX channel pairing"
+	default 2
+	range 0 3
+	help
+	  Number of additional packets per channel that may be held in the
+	  pairing buffer while waiting for matching channels.  A value of 0
+	  keeps only a single in-flight packet per channel (lowest memory,
+	  most aggressive drop policy).  Higher values tolerate larger
+	  inter-channel jitter at the cost of extra RAM.
+
 config STREAM_BIDIRECTIONAL
 	depends on TRANSPORT_CIS
 	bool "Bidirectional stream"
