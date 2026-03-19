@@ -39,13 +39,13 @@ if(CONFIG_BT_BAP_BROADCAST_SOURCE)
   add_subdirectory(broadcast_source)
 endif()
 
-if(CONFIG_BT_BAP_UNICAST_CLIENT)
-  add_subdirectory(unicast_client)
-endif()
+#if(CONFIG_BT_BAP_UNICAST_CLIENT)
+#  add_subdirectory(unicast_client)
+#endif()
 
-if(CONFIG_BT_BAP_UNICAST_SERVER)
-  add_subdirectory(unicast_server)
-endif()
+#if(CONFIG_BT_BAP_UNICAST_SERVER)
+#  add_subdirectory(unicast_server)
+#endif()
 
 
 # Include application events and configuration headers

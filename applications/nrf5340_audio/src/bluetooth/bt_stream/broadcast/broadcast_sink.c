@@ -14,6 +14,9 @@
 #include <zephyr/bluetooth/audio/cap.h>
 #include <zephyr/sys/byteorder.h>
 
+#include <zephyr/bluetooth/audio/tmap.h>
+#include <zephyr/bluetooth/audio/bap.h>
+
 /* TODO: Remove when a get_info function is implemented in host */
 #include <../subsys/bluetooth/audio/bap_endpoint.h>
 
@@ -724,6 +727,8 @@ int broadcast_sink_disable(void)
 	return 0;
 }
 
+static struct bt_bap_unicast_server_register_param unicast_server_params = {1, 0};
+
 int broadcast_sink_enable(le_audio_receive_cb recv_cb)
 {
 	int ret;
@@ -747,6 +752,26 @@ int broadcast_sink_enable(le_audio_receive_cb recv_cb)
 	receive_cb = recv_cb;
 
 	device_location_get(&device_location);
+
+	ret = bt_bap_unicast_server_register(&unicast_server_params);
+	if (ret) {
+		LOG_ERR("Could not register unicast server (err %d)", ret);
+		return ret;
+	}
+
+	const enum bt_tmap_role role =
+		(IS_ENABLED(CONFIG_BT_TMAP_CG_SUPPORTED) ? BT_TMAP_ROLE_CG : 0U) |
+		(IS_ENABLED(CONFIG_BT_TMAP_CT_SUPPORTED) ? BT_TMAP_ROLE_CT : 0U) |
+		(IS_ENABLED(CONFIG_BT_TMAP_UMS_SUPPORTED) ? BT_TMAP_ROLE_UMS : 0U) |
+		(IS_ENABLED(CONFIG_BT_TMAP_UMR_SUPPORTED) ? BT_TMAP_ROLE_UMR : 0U) |
+		(IS_ENABLED(CONFIG_BT_TMAP_BMS_SUPPORTED) ? BT_TMAP_ROLE_BMS : 0U) |
+		(IS_ENABLED(CONFIG_BT_TMAP_BMR_SUPPORTED) ? BT_TMAP_ROLE_BMR : 0U);
+
+	ret = bt_tmap_register(role);
+	if (ret) {
+		LOG_ERR("Could not register TMAP (err %d)\n", ret);
+		return ret;
+	}
 
 	ret = bt_pacs_register(&pacs_param);
 	if (ret) {
