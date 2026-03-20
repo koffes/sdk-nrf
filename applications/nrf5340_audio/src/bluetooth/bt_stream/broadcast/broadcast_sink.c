@@ -131,9 +131,10 @@ struct bt_csip_set_member_register_param csip_param = {
 
 int broadcast_sink_uuid_populate(struct net_buf_simple *uuid_buf)
 {
-	if (net_buf_simple_tailroom(uuid_buf) >= (BT_UUID_SIZE_16 * 3)) {
+	if (net_buf_simple_tailroom(uuid_buf) >= (BT_UUID_SIZE_16 * 4)) {
 		net_buf_simple_add_le16(uuid_buf, BT_UUID_BASS_VAL);
 		net_buf_simple_add_le16(uuid_buf, BT_UUID_PACS_VAL);
+		net_buf_simple_add_le16(uuid_buf, BT_UUID_ASCS_VAL);
 	} else {
 		LOG_ERR("Not enough space for UUIDS");
 		return -ENOMEM;
