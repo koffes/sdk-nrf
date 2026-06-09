@@ -337,7 +337,7 @@ static void tx_call_interval_check(struct bt_le_audio_tx_ctx *ctx, uint32_t ts_n
 	if (!IN_RANGE(time_since_last_call_us, lower_lim_us, upper_lim_us) &&
 	    ctx->ts_last_us_valid) {
 		/* This will happen if a stream is paused/restarted */
-		ctx->ts_ctlr_esti_us_valid = false;
+		ctx->ts_ctlr_esti_us_valid = true;
 
 		if (time_since_last_call_us > PRINT_WRN_LIMIT_US) {
 			/* Likely a result of a stream being paused/restarted */
@@ -443,6 +443,8 @@ static int tx_controller_sync_and_correct(struct bt_le_audio_tx_ctx *ctx,
 	}
 
 	corr_diff_us = (int64_t)ts_ctlr_real_us - (int64_t)ctx->ts_ctlr_esti_us;
+	LOG_WRN("Controller timestamp sync required. Estimated: %u us, Real: %u us, Diff: %lld us",
+		ctx->ts_ctlr_esti_us, ts_ctlr_real_us, corr_diff_us);
 
 	if ((uint32_t)(ts_now_us - ctx->ts_last_correction) < TX_TS_RESYNC_US) {
 		ctx->subsequent_rapid_corrections++;
@@ -483,18 +485,17 @@ static int tx_controller_sync_and_correct(struct bt_le_audio_tx_ctx *ctx,
 		LOG_INF("TX clock corrected by (%lld us). Late: Empty packet(s) on air",
 			corr_diff_us);
 
-		ctx->ts_ctlr_esti_us_valid = false;
+		ctx->ts_ctlr_esti_us_valid = true;
 		*status = -ETIMEDOUT;
-
 	} else if (corr_diff_us < -half_common_interval_us) {
 		LOG_INF("TX clock corrected by (%lld us). Early", corr_diff_us);
-		ctx->ts_ctlr_esti_us_valid = false;
+		ctx->ts_ctlr_esti_us_valid = true;
 	} else {
 		/* Ts corrected by some small factor*/
 		if (ctx->is_ble_clock_master) {
 			/* The gateway is the Bluetooth central. This shall not happen */
 			LOG_ERR("TX clock has been drift adjusted by (%lld us)", corr_diff_us);
-			ctx->ts_ctlr_esti_us_valid = false;
+			ctx->ts_ctlr_esti_us_valid = true;
 		} else {
 			LOG_DBG("TX clock has been drift adjusted by (%lld us)", corr_diff_us);
 			ctx->ts_ctlr_esti_us_valid = true;
@@ -623,7 +624,11 @@ int bt_le_audio_tx_send(struct bt_le_audio_tx_ctx *ctx, struct net_buf const *co
 		 */
 		int32_t time_diff_us = (int32_t)(ctx->ts_ctlr_esti_us - ts_now_us);
 
-		LOG_DBG_RATELIMIT_RATE(1000, "Time diff to controller timestamp: %d us",
+		if (!IN_RANGE(time_diff_us, 8000, 9900)) {
+			LOG_WRN("Time diff: %d us", time_diff_us);
+		}
+
+		LOG_INF_RATELIMIT_RATE(1000, "Time diff to controller timestamp: %d us",
 				       time_diff_us);
 
 		/* The time diffs below will be too large at times if the audio source is not
@@ -664,6 +669,8 @@ int bt_le_audio_tx_send(struct bt_le_audio_tx_ctx *ctx, struct net_buf const *co
 
 	sent_streams = tx_streams_send(ctx, audio_frame, tx, num_tx, num_loc, data_size_pr_stream,
 				       &last_successful_bap_stream, &tx_info);
+
+	k_sleep(K_MSEC(1));
 
 	if (sent_streams == 0U) {
 		/* If nothing was sent, do not continue with timestamp handling
