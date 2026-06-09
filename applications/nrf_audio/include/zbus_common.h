@@ -13,6 +13,7 @@
 
 #define ZBUS_READ_TIMEOUT_MS	K_MSEC(100)
 #define ZBUS_ADD_OBS_TIMEOUT_MS K_MSEC(200)
+#define ZBUS_STREAMS_NUM_MAX	8
 
 /***** Messages for zbus ******/
 
@@ -56,6 +57,8 @@ struct sdu_ref_msg {
 	uint32_t tx_sync_ts_us;
 	uint32_t curr_ts_us;
 	bool adjust;
+	struct stream_index idx[ZBUS_STREAMS_NUM_MAX];
+	uint8_t num_idx;
 };
 
 enum bt_mgmt_evt_type {

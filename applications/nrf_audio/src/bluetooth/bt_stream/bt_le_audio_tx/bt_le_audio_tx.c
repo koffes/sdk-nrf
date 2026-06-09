@@ -53,7 +53,7 @@ ZBUS_CHAN_DEFINE(sdu_ref_chan, struct sdu_ref_msg, NULL, NULL, ZBUS_OBSERVERS_EM
  * However, for the headset/peripheral (unicast server/broadcast sink)
  * regular re-sync is needed to compensate for clock drift.
  */
-#define TX_TS_RESYNC_US 1000000U
+#define TX_TS_RESYNC_US 10000000U
 
 /* When starting a stream, I2S or USB feeding the TX function with data, will usually need some time
  * to stabilize and potentially drop data to meet just-in-time requirements.
@@ -118,6 +118,9 @@ static int iso_stream_send(uint8_t const *const data, size_t size, struct bt_cap
 	net_buf_add_mem(buf, data, size);
 
 	atomic_inc(&tx_info->iso_tx_pool_alloc);
+
+	// LOG_WRN("Sending data on stream %p, size %zu, send_ts_tx: %d",
+	// 	(void *)&cap_stream->bap_stream, size, send_ts_tx);
 
 	if (send_ts_tx) {
 		ret = bt_cap_stream_send_ts(cap_stream, buf, 0U, ctx->ts_ctlr_esti_us);
@@ -473,18 +476,18 @@ static int tx_controller_sync_and_correct(struct bt_le_audio_tx_ctx *ctx,
 
 	if (corr_diff_us == 0) {
 		/* No correction needed, the estimate is correct. */
-		LOG_DBG_RATELIMIT("TX clock no adj (%lld us)", corr_diff_us);
+		LOG_INF_RATELIMIT("TX clock no adj (%lld us)", corr_diff_us);
 		ctx->ts_ctlr_esti_us_valid = true;
 
 	} else if (corr_diff_us > half_common_interval_us) {
-		LOG_DBG("TX clock corrected by (%lld us). Late: Empty packet(s) on air",
+		LOG_INF("TX clock corrected by (%lld us). Late: Empty packet(s) on air",
 			corr_diff_us);
 
 		ctx->ts_ctlr_esti_us_valid = false;
 		*status = -ETIMEDOUT;
 
 	} else if (corr_diff_us < -half_common_interval_us) {
-		LOG_DBG("TX clock corrected by (%lld us). Early", corr_diff_us);
+		LOG_INF("TX clock corrected by (%lld us). Early", corr_diff_us);
 		ctx->ts_ctlr_esti_us_valid = false;
 	} else {
 		/* Ts corrected by some small factor*/
@@ -507,14 +510,21 @@ static int tx_controller_sync_and_correct(struct bt_le_audio_tx_ctx *ctx,
 	return 0;
 }
 
-static void tx_publish_sdu_ref_and_finalize(struct bt_le_audio_tx_ctx *ctx, uint32_t ts_now_us)
+static void tx_publish_sdu_ref_and_finalize(struct bt_le_audio_tx_ctx *ctx, uint32_t ts_now_us,
+					    struct le_audio_tx_info *tx, uint8_t num_tx)
 {
 	int ret;
 	struct sdu_ref_msg msg;
 
 	msg.tx_sync_ts_us = ctx->ts_ctlr_esti_us;
-	msg.curr_ts_us = ts_now_us;
+	msg.curr_ts_us = audio_sync_timer_capture();
 	msg.adjust = true;
+
+	/* Add stream indices */
+	msg.num_idx = num_tx;
+	for (uint8_t i = 0; i < num_tx; i++) {
+		msg.idx[i] = tx[i].idx;
+	}
 
 	ret = zbus_chan_pub(&sdu_ref_chan, &msg, K_NO_WAIT);
 	if (ret != 0) {
@@ -672,10 +682,11 @@ int bt_le_audio_tx_send(struct bt_le_audio_tx_ctx *ctx, struct net_buf const *co
 					     ts_now_us, tx_info, &status);
 
 	if (ret != 0) {
+		LOG_WRN("Failed to sync and correct with controller after sending: %d", ret);
 		return ret;
 	}
 
-	tx_publish_sdu_ref_and_finalize(ctx, ts_now_us);
+	tx_publish_sdu_ref_and_finalize(ctx, ts_now_us, tx, num_tx);
 	return status;
 }
 
