@@ -53,7 +53,7 @@ ZBUS_CHAN_DEFINE(sdu_ref_chan, struct sdu_ref_msg, NULL, NULL, ZBUS_OBSERVERS_EM
  * However, for the headset/peripheral (unicast server/broadcast sink)
  * regular re-sync is needed to compensate for clock drift.
  */
-#define TX_TS_RESYNC_US 10000000U
+#define TX_TS_RESYNC_US 1000000U
 
 /* When starting a stream, I2S or USB feeding the TX function with data, will usually need some time
  * to stabilize and potentially drop data to meet just-in-time requirements.
@@ -383,7 +383,7 @@ static void tx_call_interval_check(struct bt_le_audio_tx_ctx *ctx, uint32_t ts_n
 	if (!IN_RANGE(time_since_last_call_us, lower_lim_us, upper_lim_us) &&
 	    ctx->ts_last_us_valid) {
 		/* This will happen if a stream is paused/restarted */
-		ctx->ts_ctlr_esti_us_valid = true;
+		ctx->ts_ctlr_esti_us_valid = false;
 
 		if (time_since_last_call_us > PRINT_WRN_LIMIT_US) {
 			/* Likely a result of a stream being paused/restarted */
@@ -669,10 +669,6 @@ int bt_le_audio_tx_send(struct bt_le_audio_tx_ctx *ctx, struct net_buf const *co
 		 *	Too slow/not enough data -> Skip SDU
 		 */
 		int32_t time_diff_us = (int32_t)(ctx->ts_ctlr_esti_us - ts_now_us);
-
-		if (!IN_RANGE(time_diff_us, 8000, 9900)) {
-			LOG_WRN("Time diff: %d us", time_diff_us);
-		}
 
 		LOG_INF_RATELIMIT_RATE(1000, "Time diff to controller timestamp: %d us",
 				       time_diff_us);
