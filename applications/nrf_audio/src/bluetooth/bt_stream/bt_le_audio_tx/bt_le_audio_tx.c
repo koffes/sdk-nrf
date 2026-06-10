@@ -60,6 +60,30 @@ ZBUS_CHAN_DEFINE(sdu_ref_chan, struct sdu_ref_msg, NULL, NULL, ZBUS_OBSERVERS_EM
  */
 #define SUBSEQUENT_RAPID_CORRECTIONS_LIMIT 20U
 
+#define ISO_FLUSH_Q_STACK_SIZE 512
+
+BUILD_ASSERT(IS_ENABLED(CONFIG_BT_TX_PROCESSOR_THREAD), "BT_TX_PROCESSOR_THREAD must be enabled");
+
+#if CONFIG_BT_TX_PROCESSOR_THREAD_PRIO == K_LOWEST_APPLICATION_THREAD_PRIO
+#error "CONFIG_BT_TX_PROCESSOR_THREAD_PRIO must be set higher than K_LOWEST_APPLICATION_THREAD_PRIO"
+#endif
+#define ISO_FLUSH_Q_PRIORITY 0
+
+BUILD_ASSERT(ISO_FLUSH_Q_PRIORITY > CONFIG_BT_TX_PROCESSOR_THREAD_PRIO,
+	     "ISO_FLUSH_Q_PRIORITY must be lower or equal to CONFIG_BT_TX_PROCESSOR_THREAD_PRIO");
+
+static const int prio_bt_tx = CONFIG_BT_TX_PROCESSOR_THREAD_PRIO;
+
+K_THREAD_STACK_DEFINE(iso_flush_work_q_stack_area, ISO_FLUSH_Q_STACK_SIZE);
+
+static struct k_work_q iso_flush_work_q;
+static struct k_work iso_flush_work;
+
+static void iso_flush_work_handler(struct k_work *work)
+{
+	(void)work;
+}
+
 /**
  * @brief Sends audio data over a single BAP stream.
  *
@@ -295,6 +319,28 @@ static int controller_ts_tx_get(const struct bt_bap_stream *bap_stream, uint32_t
 		return ret;
 	}
 
+	/* The host may re-order ISO and command data. Hence, we flush the ISO data by executing
+	 * a workqueue which executes with lower priority than the BT TX processor.
+	 * See https://github.com/zephyrproject-rtos/zephyr/issues/110939.
+	 */
+	int prio_this = k_thread_priority_get(k_current_get());
+
+	LOG_DBG("Tx sync. Current prio: %d, BT TX processor prio: %d", prio_this, prio_bt_tx);
+
+	if (prio_this <= prio_bt_tx || prio_this < 0) {
+		ret = k_work_submit_to_queue(&iso_flush_work_q, &iso_flush_work);
+		if (ret < 0) {
+			LOG_WRN("Failed to submit ISO flush work: %d", ret);
+			return ret;
+		}
+
+		ret = k_work_queue_drain(&iso_flush_work_q, false);
+		if (ret < 0) {
+			LOG_ERR("Failed to drain ISO flush work return value: %d", ret);
+			return -EFAULT;
+		}
+	}
+
 	ret = get_tx_sync_sdc(tx_info->iso_conn_handle, &tx_info->iso_tx_readback);
 	if (ret != 0) {
 		LOG_ERR("Unable to get tx sync. ret: %d", ret);
@@ -443,7 +489,7 @@ static int tx_controller_sync_and_correct(struct bt_le_audio_tx_ctx *ctx,
 	}
 
 	corr_diff_us = (int64_t)ts_ctlr_real_us - (int64_t)ctx->ts_ctlr_esti_us;
-	LOG_WRN("Controller timestamp sync required. Estimated: %u us, Real: %u us, Diff: %lld us",
+	LOG_INF("Controller timestamp sync required. Estimated: %u us, Real: %u us, Diff: %lld us",
 		ctx->ts_ctlr_esti_us, ts_ctlr_real_us, corr_diff_us);
 
 	if ((uint32_t)(ts_now_us - ctx->ts_last_correction) < TX_TS_RESYNC_US) {
@@ -670,8 +716,6 @@ int bt_le_audio_tx_send(struct bt_le_audio_tx_ctx *ctx, struct net_buf const *co
 	sent_streams = tx_streams_send(ctx, audio_frame, tx, num_tx, num_loc, data_size_pr_stream,
 				       &last_successful_bap_stream, &tx_info);
 
-	k_sleep(K_MSEC(1));
-
 	if (sent_streams == 0U) {
 		/* If nothing was sent, do not continue with timestamp handling
 		 * Info is printed in tx_streams_send().
@@ -742,6 +786,8 @@ int bt_le_audio_tx_init(struct bt_le_audio_tx_ctx *ctx, bool is_clock_master)
 		return -EINVAL;
 	}
 
+	static bool init_done;
+
 	struct net_buf_pool *tmp = ctx->iso_tx_pool;
 
 	(void)memset(ctx, 0, sizeof(*ctx));
@@ -756,6 +802,17 @@ int bt_le_audio_tx_init(struct bt_le_audio_tx_ctx *ctx, bool is_clock_master)
 			}
 		}
 	}
+
+	if (!init_done) {
+		k_work_queue_init(&iso_flush_work_q);
+		k_work_init(&iso_flush_work, iso_flush_work_handler);
+
+		k_work_queue_start(&iso_flush_work_q, iso_flush_work_q_stack_area,
+				   K_THREAD_STACK_SIZEOF(iso_flush_work_q_stack_area),
+				   ISO_FLUSH_Q_PRIORITY, NULL);
+	}
+
+	init_done = true;
 
 	return 0;
 }
