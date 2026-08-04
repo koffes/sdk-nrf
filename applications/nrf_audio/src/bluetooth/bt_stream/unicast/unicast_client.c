@@ -901,7 +901,7 @@ static void common_qos_params_cfg(struct server_store *server, enum bt_audio_dir
 	case BT_AUDIO_DIR_SINK:
 		/* If common is not configured, use server info (populated by PACS)*/
 		if (group_qos.snk.configured == false) {
-			LOG_WRN("Sink QoS parameters not configured, using default values");
+			LOG_DBG("Sink QoS parameters not configured, using server values");
 			group_qos.snk.pres_dly_us = server->snk.lc3_preset[0].qos.pd;
 			group_qos.snk.framing = server->snk.lc3_preset[0].qos.framing;
 			group_qos.snk.transport_latency_ms = server->snk.lc3_preset[0].qos.latency;
@@ -914,7 +914,7 @@ static void common_qos_params_cfg(struct server_store *server, enum bt_audio_dir
 		break;
 	case BT_AUDIO_DIR_SOURCE:
 		if (group_qos.src.configured == false) {
-			LOG_WRN("Source QoS parameters not configured, using default values");
+			LOG_DBG("Source QoS parameters not configured, using server values");
 			group_qos.src.pres_dly_us = server->src.lc3_preset[0].qos.pd;
 			group_qos.src.framing = server->src.lc3_preset[0].qos.framing;
 			group_qos.src.transport_latency_ms = server->src.lc3_preset[0].qos.latency;
@@ -963,7 +963,6 @@ static void discover_cb(struct bt_conn *conn, int err, enum bt_audio_dir dir)
 	}
 
 	/* At this point, the PACs have been parsed, and the server has a preset populated */
-
 	common_qos_params_cfg(server, dir);
 
 	if (server->src.waiting_for_disc) {
