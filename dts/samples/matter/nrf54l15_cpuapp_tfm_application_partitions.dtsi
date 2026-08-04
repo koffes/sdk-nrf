@@ -27,15 +27,11 @@
 	};
 };
 
-/delete-node/ &slot0_s_partition;
-/delete-node/ &storage_partition;
-/delete-node/ &slot0_ns_partition;
-/delete-node/ &tfm_its_partition;
-/delete-node/ &tfm_otp_partition;
-/delete-node/ &tfm_ps_partition;
-
-/* Specify secure and nonsecure partitions within the slot0_partition which is
- * defined in the tfm_base_partitions file.
+/* The default flash partitions are already dropped wholesale by the
+ * tfm_base_partitions include (it deletes the entire partitions node so it
+ * works for both the secure and non-secure vendor layouts), so there is
+ * nothing to delete here. Specify the secure and nonsecure partitions within
+ * the slot0_partition defined in that file.
  */
 
 &slot0_partition {
