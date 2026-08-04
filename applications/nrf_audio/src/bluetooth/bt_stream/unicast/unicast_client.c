@@ -1152,7 +1152,9 @@ static void stream_configured_cb(struct bt_bap_stream *stream,
 		existing_pres_dly_us = group_qos.src.pres_dly_us;
 	}
 
-	ret = srv_store_pres_dly_find(stream, &new_pres_dly_us, &existing_pres_dly_us, server_pref,
+	uint32_t unused;
+
+	ret = srv_store_pres_dly_find(stream, &new_pres_dly_us, &unused, server_pref,
 				      &group_reconfigure_needed, unicast_group);
 	if (ret) {
 		LOG_ERR("Cannot get a valid presentation delay");
@@ -1164,6 +1166,8 @@ static void stream_configured_cb(struct bt_bap_stream *stream,
 		srv_store_unlock();
 		return;
 	}
+
+	/* TODO: Add check for framing and transport latency */
 
 	if ((new_pres_dly_us != existing_pres_dly_us) ||  group_reconfigure_needed) {
 		LOG_WRN("Stream QoS PD: %d, prev group PD: %d, new PD %d", stream->qos->pd,
