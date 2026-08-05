@@ -763,6 +763,7 @@ __weak int nrf_wifi_if_zep_stop_board(const struct device *dev)
 	return 0;
 }
 
+<<<<<<< HEAD
 /* Clear the per-VIF operational state that must not survive an interface down.
  * vif_ctx_zep lives in the device data, so anything left set here is inherited
  * by the next bring-up: a stale scan_in_progress, for instance, makes every
