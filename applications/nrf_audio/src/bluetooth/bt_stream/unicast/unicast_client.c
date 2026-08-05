@@ -596,9 +596,10 @@ static void bap_location_cb(struct bt_conn *conn, enum bt_audio_dir dir,
 static void bap_available_contexts_cb(struct bt_conn *conn, enum bt_audio_context snk_ctx,
 				  enum bt_audio_context src_ctx)
 {
-	int ret;
 
-	LOG_DBG("conn: %p, snk ctx %d src ctx %d", (void *)conn, snk_ctx, src_ctx);
+	LOG_DBG("CB BAP available contexts for conn %p  snk ctx %d src ctx %d", (void *)conn, snk_ctx, src_ctx);
+
+	int ret;
 
 	ret = srv_store_lock(CAP_PROCED_SEM_WAIT_TIME_MS);
 	if (ret < 0) {
@@ -628,6 +629,9 @@ static void bap_available_contexts_cb(struct bt_conn *conn, enum bt_audio_contex
 static void bap_pac_record_cb(struct bt_conn *conn, enum bt_audio_dir dir,
 			  const struct bt_audio_codec_cap *codec)
 {
+
+	LOG_DBG("CB BAP PAC record for conn %p, dir %d", (void *)conn, dir);
+
 	int ret;
 
 	if (codec->id != BT_HCI_CODING_FORMAT_LC3) {
@@ -660,6 +664,8 @@ static void bap_pac_record_cb(struct bt_conn *conn, enum bt_audio_dir dir,
 static void bap_endpoint_cb(struct bt_conn *conn, enum bt_audio_dir dir, struct bt_bap_ep *ep)
 {
 	int ret;
+
+	LOG_DBG("CB BAP endpoint discovery for conn %p, dir %d", (void *)conn, dir);
 
 	ret = srv_store_lock(CAP_PROCED_SEM_WAIT_TIME_MS);
 	if (ret < 0) {
@@ -869,6 +875,13 @@ static bool server_is_not_waiting_for_disc_check(struct server_store *server, vo
 
 static void bap_discover_cb(struct bt_conn *conn, int err, enum bt_audio_dir dir)
 {
+
+	if (err) {
+		LOG_ERR("CB BAP discover for conn %p, dir %d, err %d", (void *)conn, dir, err);
+	} else {
+		LOG_DBG("CB BAP discover for conn %p, dir %d", (void *)conn, dir);
+	}
+
 	int ret;
 
 	ret = srv_store_lock(CAP_PROCED_SEM_WAIT_TIME_MS);
