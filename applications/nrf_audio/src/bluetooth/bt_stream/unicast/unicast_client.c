@@ -28,7 +28,7 @@
 #include "server_store.h"
 
 #include <zephyr/logging/log.h>
-LOG_MODULE_REGISTER(unicast_client, CONFIG_UNICAST_CLIENT_LOG_LEVEL);
+LOG_MODULE_REGISTER(unicast_client, 4);
 
 ZBUS_CHAN_DEFINE(le_audio_chan, struct le_audio_msg, NULL, NULL, ZBUS_OBSERVERS_EMPTY,
 		 ZBUS_MSG_INIT(0));
@@ -63,6 +63,37 @@ BT_LE_AUDIO_TX_DEFINE(bt_le_audio_tx);
 
 static struct bt_cap_unicast_group *unicast_group;
 static bool unicast_group_created;
+static struct bt_cap_unicast_group_param group_param;
+static struct bt_cap_unicast_group_stream_pair_param
+		pair_params[CONFIG_BT_BAP_UNICAST_CLIENT_GROUP_STREAM_COUNT];
+
+/* All streams in a given CIG for a given direction must have these common values */
+struct group_common_qos {
+	uint32_t pres_dly_us;
+	enum bt_bap_qos_cfg_framing framing;
+	uint16_t transport_latency_ms;
+	bool configured;
+};
+
+struct group_common_qos_bidir {
+	struct group_common_qos snk;
+	struct group_common_qos src;
+};
+
+#define QOS_CFG_FRAMING_FRAMED_INVALID 0xFF
+
+#define GROUP_COMMON_VALUES_RESET				\
+	{							\
+		.configured = false,				\
+		.pres_dly_us = BT_BAP_PD_UNSET,			\
+		.framing = QOS_CFG_FRAMING_FRAMED_INVALID,	\
+		.transport_latency_ms = 0,			\
+	}
+
+static struct group_common_qos_bidir group_qos = {
+	.snk = GROUP_COMMON_VALUES_RESET,
+	.src = GROUP_COMMON_VALUES_RESET,
+};
 
 static bool playing_state = true;
 
@@ -158,7 +189,8 @@ struct group_streams_populate_data {
 
 static bool unicast_group_populate(struct server_store *server, void *user_data)
 {
-	struct group_streams_populate_data *data = (struct group_streams_populate_data *)user_data;
+	struct group_streams_populate_data *data =
+		(struct group_streams_populate_data *)user_data;
 
 	if (server->snk.num_eps == 0 && server->src.num_eps == 0) {
 		LOG_DBG("Server %s has no valid sink or source EPs, skipping", server->name);
@@ -174,7 +206,8 @@ static bool unicast_group_populate(struct server_store *server, void *user_data)
 
 		data->sink_stream_params[data->sink_iterator].qos_cfg =
 			&server->snk.lc3_preset[j].qos;
-		data->sink_stream_params[data->sink_iterator].stream = &server->snk.cap_streams[j];
+		data->sink_stream_params[data->sink_iterator].stream =
+			&server->snk.cap_streams[j];
 		data->sink_iterator++;
 	}
 
@@ -204,6 +237,10 @@ static void unicast_group_create(void)
 {
 	int ret;
 
+	/* Create a new group, clear data */
+	static struct group_streams_populate_data data;
+	(void)memset(&data, 0, sizeof(data));
+
 	ret = srv_store_lock(CAP_PROCED_SEM_WAIT_TIME_MS);
 	if (ret < 0) {
 		LOG_ERR("%s: Failed to lock server store: %d", __func__, ret);
@@ -228,8 +265,6 @@ static void unicast_group_create(void)
 	}
 
 	/* Populate the stream params arrays */
-	struct group_streams_populate_data data = {0};
-
 	ret = srv_store_foreach_server(unicast_group_populate, &data);
 	if (ret < 0) {
 		LOG_ERR("Failed to populate unicast group stream params: %d", ret);
@@ -237,9 +272,6 @@ static void unicast_group_create(void)
 		return;
 	}
 
-	struct bt_cap_unicast_group_stream_pair_param
-		pair_params[CONFIG_BT_BAP_UNICAST_CLIENT_GROUP_STREAM_COUNT];
-	struct bt_cap_unicast_group_param group_param;
 	int stream_iterator = 0;
 
 	/* Pair TX and RX from same server.
@@ -267,7 +299,8 @@ static void unicast_group_create(void)
 			struct server_store *source_server = NULL;
 
 			ret = srv_store_from_stream_get(
-				&data.source_stream_params[j].stream->bap_stream, &source_server);
+				&data.source_stream_params[j].stream->bap_stream,
+				&source_server);
 			if (ret < 0) {
 				LOG_ERR("Failed to get server from source stream %p: %d",
 					(void *)&data.source_stream_params[j].stream->bap_stream,
@@ -717,6 +750,7 @@ static void endpoint_cb(struct bt_conn *conn, enum bt_audio_dir dir, struct bt_b
 	srv_store_unlock();
 }
 
+
 /**
  * @brief	Callback when sink discovery has finished. This function will also set the codec
  *		configuration to be used in the preset(s) based on the discovered codec capabilities
@@ -865,6 +899,45 @@ static bool server_is_not_waiting_for_disc_check(struct server_store *server, vo
 	return true;
 }
 
+/* Set / get the common QoS parameters for the unicast group */
+static void common_qos_params_cfg(struct server_store *server, enum bt_audio_dir dir)
+{
+	switch (dir) {
+	case BT_AUDIO_DIR_SINK:
+		/* If common is not configured, use server info (populated by PACS)*/
+		if (group_qos.snk.configured == false) {
+			LOG_WRN("Sink QoS parameters not configured, using server values");
+			group_qos.snk.pres_dly_us = server->snk.lc3_preset[0].qos.pd;
+			group_qos.snk.framing = server->snk.lc3_preset[0].qos.framing;
+			group_qos.snk.transport_latency_ms = server->snk.lc3_preset[0].qos.latency;
+			group_qos.snk.configured = true;
+		} else {
+			LOG_WRN("Sink QoS parameters already configured, using group values %d", group_qos.snk.pres_dly_us);
+			server->snk.lc3_preset[0].qos.pd = group_qos.snk.pres_dly_us;
+			server->snk.lc3_preset[0].qos.framing = group_qos.snk.framing;
+			server->snk.lc3_preset[0].qos.latency = group_qos.snk.transport_latency_ms;
+		}
+		break;
+	case BT_AUDIO_DIR_SOURCE:
+		if (group_qos.src.configured == false) {
+			LOG_WRN("Source QoS parameters not configured, using server values");
+			group_qos.src.pres_dly_us = server->src.lc3_preset[0].qos.pd;
+			group_qos.src.framing = server->src.lc3_preset[0].qos.framing;
+			group_qos.src.transport_latency_ms = server->src.lc3_preset[0].qos.latency;
+			group_qos.src.configured = true;
+		} else {
+			LOG_WRN("Source QoS parameters already configured, using group values %d", group_qos.src.pres_dly_us);
+			server->src.lc3_preset[0].qos.pd = group_qos.src.pres_dly_us;
+			server->src.lc3_preset[0].qos.framing = group_qos.src.framing;
+			server->src.lc3_preset[0].qos.latency = group_qos.src.transport_latency_ms;
+		}
+		break;
+	default:
+		LOG_ERR("%s: Unknown direction: %d", __func__, dir);
+		break;
+	}
+}
+
 static void discover_cb(struct bt_conn *conn, int err, enum bt_audio_dir dir)
 {
 	int ret;
@@ -895,6 +968,9 @@ static void discover_cb(struct bt_conn *conn, int err, enum bt_audio_dir dir)
 		srv_store_unlock();
 		return;
 	}
+
+	/* At this point, the PACs have been parsed, and the server has a preset populated */
+	common_qos_params_cfg(server, dir);
 
 	if (server->src.waiting_for_disc) {
 		ret = bt_bap_unicast_client_discover(conn, BT_AUDIO_DIR_SOURCE);
@@ -928,49 +1004,89 @@ static void discover_cb(struct bt_conn *conn, int err, enum bt_audio_dir dir)
 	k_work_submit(&cap_start_work);
 }
 
-#if (CONFIG_BT_AUDIO_TX)
-static void stream_sent_cb(struct bt_bap_stream *stream)
-{
-	int ret;
-	struct stream_index idx;
-	uint8_t state;
-
-	ret = le_audio_ep_state_get(stream->ep, &state);
-	if (ret) {
-		LOG_ERR("Failed to get endpoint state: %d", ret);
-		return;
-	}
-
-	if (state == BT_BAP_EP_STATE_STREAMING) {
-		ret = stream_idx_get(stream, &idx);
-		if (ret) {
-			LOG_ERR("%s: Failed to get stream index: %d", __func__, ret);
-			return;
-		}
-		ERR_CHK(bt_le_audio_tx_stream_sent(bt_le_audio_tx, idx));
-	} else {
-		LOG_WRN("Not in streaming state: %d", state);
-	}
-}
-#endif /* CONFIG_BT_AUDIO_TX */
+static struct bt_bap_unicast_client_cb unicast_client_cbs = {
+	.location = unicast_client_location_cb,
+	.available_contexts = available_contexts_cb,
+	.pac_record = pac_record_cb,
+	.endpoint = endpoint_cb,
+	.discover = discover_cb,
+};
 
 static bool new_pres_dly_us_set(struct bt_cap_stream *stream, void *user_data)
 {
-	uint32_t *new_pres_dly_us = (uint32_t *)user_data;
+	int ret;
+	enum bt_audio_dir *dir_to_set = (enum bt_audio_dir *)user_data;
+	LOG_WRN("Checking stream %p for dir %d", (void *)&stream->bap_stream, *dir_to_set);
 
-	/* The stream's qos pointer is const, but here it points to app-owned mutable
-	 * preset storage (server->{snk,src}.lc3_preset[].qos), so updating it is safe.
-	 */
-	struct bt_bap_qos_cfg *qos = (struct bt_bap_qos_cfg *)stream->bap_stream.qos;
+	struct server_store *server = NULL;
+	enum bt_audio_dir dir;
 
-	qos->pd = *new_pres_dly_us;
+	ret = le_audio_stream_dir_get(&stream->bap_stream);
+	if (ret < 0) {
+		/* This stream is not yet configured */
+		LOG_DBG("Failed to get dir of stream %p", (void *)&stream->bap_stream);
+		return true;
+	}
+
+	dir = (enum bt_audio_dir)ret;
+
+	if (*dir_to_set != dir) {
+		LOG_DBG("Stream %p dir %d does not match group dir %d, skipping",
+			(void *)&stream->bap_stream, dir, *dir_to_set);
+		return true;
+	}
+
+	ret = srv_store_from_stream_get(&stream->bap_stream, &server);
+	if (ret) {
+		LOG_ERR("Srv store from stream get failed: %d", ret);
+		return false;
+	}
+
+	if (dir == BT_AUDIO_DIR_SINK) {
+		server->snk.lc3_preset[0].qos.pd = group_qos.snk.pres_dly_us;
+		LOG_DBG("Updated TX stream %p PD to %d", (void *)stream, group_qos.snk.pres_dly_us);
+		return true;
+	}
+
+	if (dir == BT_AUDIO_DIR_SOURCE) {
+		server->src.lc3_preset[0].qos.pd = group_qos.src.pres_dly_us;
+		LOG_DBG("Updated RX stream %p PD to %d", (void *)stream, group_qos.src.pres_dly_us);
+		return true;
+	}
 
 	return true;
 }
 
-static void stream_configured_cb(struct bt_bap_stream *stream,
+static int unicast_group_check_correct_pd(struct bt_cap_unicast_group *group,
+					  uint32_t new_pres_dly_us, enum bt_audio_dir dir)
+{
+	int ret;
+	struct bt_cap_unicast_group_info group_info;
+
+	ret =  bt_cap_unicast_group_get_info(group, &group_info);
+	if (ret) {
+		LOG_ERR("Failed to get unicast group info: %d", ret);
+		return ret;
+	}
+
+	if (dir == BT_AUDIO_DIR_SINK && group_info.unicast_group->sink_pd != new_pres_dly_us) {
+		LOG_ERR("Sink presentation delay for unicast group is not correct");
+		return -EINVAL;
+	}
+
+	if (dir == BT_AUDIO_DIR_SOURCE && group_info.unicast_group->source_pd != new_pres_dly_us) {
+		LOG_ERR("Source presentation delay for unicast group is not correct");
+		return -EINVAL;
+	}
+
+	return 0;
+}
+
+static void stream_codec_configured_cb(struct bt_bap_stream *stream,
 				 const struct bt_bap_qos_cfg_pref *server_pref)
 {
+	LOG_DBG("Stream codec configured CB, stream: %p", (void *)stream);
+	
 	int ret;
 	enum bt_audio_dir dir;
 	uint32_t new_pres_dly_us = 0;
@@ -1014,7 +1130,23 @@ static void stream_configured_cb(struct bt_bap_stream *stream,
 	bool group_reconfigure_needed = false;
 	uint32_t existing_pres_dly_us = 0;
 
-	ret = srv_store_pres_dly_find(stream, &new_pres_dly_us, &existing_pres_dly_us, server_pref,
+	if (dir == BT_AUDIO_DIR_SINK) {
+		if (!group_qos.snk.configured) {
+			LOG_ERR("Sink QoS parameters not configured");
+			return;
+		}
+		existing_pres_dly_us = group_qos.snk.pres_dly_us;
+	} else {
+		if (!group_qos.src.configured) {
+			LOG_ERR("Source QoS parameters not configured");
+			return;
+		}
+		existing_pres_dly_us = group_qos.src.pres_dly_us;
+	}
+
+	uint32_t unused;
+
+	ret = srv_store_pres_dly_find(stream, &new_pres_dly_us, &unused, server_pref,
 				      &group_reconfigure_needed, unicast_group);
 	if (ret) {
 		LOG_ERR("Cannot get a valid presentation delay");
@@ -1027,36 +1159,73 @@ static void stream_configured_cb(struct bt_bap_stream *stream,
 		return;
 	}
 
-	srv_store_unlock();
+	/* TODO: Add check for framing and transport latency */
 
-	if (((new_pres_dly_us != stream->qos->pd) &&
-	     le_audio_ep_state_check(stream->ep, BT_BAP_EP_STATE_CODEC_CONFIGURED)) ||
-	    group_reconfigure_needed) {
-		LOG_INF("Stream QoS PD: %d, prev group PD: %d, new PD %d", stream->qos->pd,
+	if ((new_pres_dly_us != existing_pres_dly_us) ||  group_reconfigure_needed) {
+		LOG_WRN("Stream QoS PD: %d, prev group PD: %d, new PD %d", stream->qos->pd,
 			existing_pres_dly_us, new_pres_dly_us);
+
+		if (dir == BT_AUDIO_DIR_SINK) {
+			group_qos.snk.pres_dly_us = new_pres_dly_us;
+		} else {
+			group_qos.src.pres_dly_us = new_pres_dly_us;
+		}
+
+
+		LOG_DBG("Setting new presentation delay for unicast group: %d", new_pres_dly_us);
 		ret = bt_cap_unicast_group_foreach_stream(unicast_group, new_pres_dly_us_set,
-							  &new_pres_dly_us);
+							  (void *)&dir);
 		if (ret) {
 			LOG_ERR("Failed to update presentation delay for unicast group: %d", ret);
+			srv_store_unlock();
 			return;
 		}
+
+		/* Need to reconfigure the group if it has been created.
+		 * If group exists, it needs to be updated for the new parameters to take effect.
+		 */
+
+		// Something strange here, we get: alid_unicast_group_stream_param: Mismatch in pd: 5000 != 40000
+		if (unicast_group_created) {
+			LOG_INF("Group reconfigure needed: %d, unicast group created: %d",
+				 group_reconfigure_needed, unicast_group_created);
+			/* Reconfigure the unicast group with the new presentation delay */
+			ret = bt_cap_unicast_group_reconfig(unicast_group, &group_param);
+			if (ret) {
+				LOG_ERR("Failed to reconfigure unicast group: %d", ret);
+				srv_store_unlock();
+				return;
+			}
+
+			/* Sanity check, check that PD is correct */
+			ret = unicast_group_check_correct_pd(unicast_group, new_pres_dly_us, dir);
+			if (ret) {
+				LOG_ERR("Group has wrong presentation delay: %d", ret);
+				srv_store_unlock();
+				return;
+			}
+		}
 	}
+
+	srv_store_unlock();
 
 	le_audio_event_publish(LE_AUDIO_EVT_CONFIG_RECEIVED, stream->conn, stream, dir);
 }
 
-static void stream_qos_set_cb(struct bt_bap_stream *stream)
+static void stream_qos_configured_cb(struct bt_bap_stream *stream)
 {
-	LOG_DBG("QoS set cb");
+	LOG_DBG("Stream QoS configured CB, stream: %p", (void *)stream);
 }
 
 static void stream_enabled_cb(struct bt_bap_stream *stream)
 {
-	LOG_DBG("Stream enabled: %p", (void *)stream);
+	LOG_DBG("Stream enabled CB: %p", (void *)stream);
 }
 
 static void stream_started_cb(struct bt_bap_stream *stream)
 {
+	LOG_DBG("Stream started CB, stream: %p", (void *)stream);
+
 	int ret;
 	enum bt_audio_dir dir;
 
@@ -1086,16 +1255,18 @@ static void stream_started_cb(struct bt_bap_stream *stream)
 
 static void stream_metadata_updated_cb(struct bt_bap_stream *stream)
 {
-	LOG_DBG("Audio Stream %p metadata updated", (void *)stream);
+	LOG_DBG("Stream metadata updated CB, stream: %p", (void *)stream);
 }
 
 static void stream_disabled_cb(struct bt_bap_stream *stream)
 {
-	LOG_DBG("Audio Stream %p disabled", (void *)stream);
+	LOG_DBG("Stream disabled CB, stream: %p", (void *)stream);
 }
 
 static void stream_stopped_cb(struct bt_bap_stream *stream, uint8_t reason)
 {
+	LOG_DBG("Stream stopped CB, stream: %p", (void *)stream);
+
 	int ret;
 
 	/* NOTE: The string below is used by the Nordic CI system */
@@ -1151,9 +1322,9 @@ static bool all_streams_released_check(struct bt_cap_stream *stream, void *user_
 
 static void stream_released_cb(struct bt_bap_stream *stream)
 {
-	int ret;
+	LOG_DBG("Stream released CB, stream: %p", (void *)stream);
 
-	LOG_DBG("Audio Stream %p released", (void *)stream);
+	int ret;
 
 	/* Check if unicast_group_recreate has been requested */
 	if (unicast_group_created == false) {
@@ -1205,35 +1376,75 @@ static void stream_recv_cb(struct bt_bap_stream *stream, const struct bt_iso_rec
 }
 #endif /* (CONFIG_BT_AUDIO_RX) */
 
+#if (CONFIG_BT_AUDIO_TX)
+static void stream_sent_cb(struct bt_bap_stream *stream)
+{
+	int ret;
+	struct stream_index idx;
+	uint8_t state;
+
+	ret = le_audio_ep_state_get(stream->ep, &state);
+	if (ret) {
+		LOG_ERR("Failed to get endpoint state: %d", ret);
+		return;
+	}
+
+	if (state == BT_BAP_EP_STATE_STREAMING) {
+		ret = stream_idx_get(stream, &idx);
+		if (ret) {
+			LOG_ERR("%s: Failed to get stream index: %d", __func__, ret);
+			return;
+		}
+		ERR_CHK(bt_le_audio_tx_stream_sent(bt_le_audio_tx, idx));
+	} else {
+		LOG_WRN("Not in streaming state: %d", state);
+	}
+}
+#endif /* CONFIG_BT_AUDIO_TX */
+
+static void stream_connected_cb(struct bt_bap_stream *stream)
+{
+	LOG_DBG("Stream connected CB, stream: %p", (void *)stream);
+}
+
+static void stream_disconnected_cb(struct bt_bap_stream *stream, uint8_t reason)
+{
+	LOG_DBG("Stream disconnected CB, stream: %p, reason: %d", (void *)stream, reason);
+}
+
 static struct bt_bap_stream_ops stream_ops = {
-	.configured = stream_configured_cb,
-	.qos_set = stream_qos_set_cb,
+	.configured = stream_codec_configured_cb,
+	.qos_set = stream_qos_configured_cb,
 	.enabled = stream_enabled_cb,
-	.started = stream_started_cb,
 	.metadata_updated = stream_metadata_updated_cb,
 	.disabled = stream_disabled_cb,
-	.stopped = stream_stopped_cb,
 	.released = stream_released_cb,
+	.started = stream_started_cb,
+	.stopped = stream_stopped_cb,
 #if (CONFIG_BT_AUDIO_RX)
 	.recv = stream_recv_cb,
 #endif /* (CONFIG_BT_AUDIO_RX) */
 #if (CONFIG_BT_AUDIO_TX)
 	.sent = stream_sent_cb,
 #endif /* (CONFIG_BT_AUDIO_TX) */
+	.connected = stream_connected_cb,
+	.disconnected = stream_disconnected_cb,
 };
 
-static struct bt_bap_unicast_client_cb unicast_client_cbs = {
-	.location = unicast_client_location_cb,
-	.available_contexts = available_contexts_cb,
-	.pac_record = pac_record_cb,
-	.endpoint = endpoint_cb,
-	.discover = discover_cb,
-};
+/* bt_bap_stream_ops callbacks end ---------------------------------------------------------------*/
+
+/* bt_cap_initiator_cb callbacks begin -----------------------------------------------------------*/
 
 static void unicast_discovery_complete_cb(struct bt_conn *conn, int err,
 					  const struct bt_csip_set_coordinator_set_member *member,
 					  const struct bt_csip_set_coordinator_csis_inst *csis_inst)
 {
+	if (err) {
+		LOG_ERR("Discovery complete CB, conn: %p, err: %d", (void *)conn, err);
+	} else {
+		LOG_DBG("Discovery complete CB, conn: %p", (void *)conn);
+	}
+
 	int ret;
 	struct le_audio_msg msg;
 	struct server_store *server = NULL;
@@ -1268,8 +1479,6 @@ static void unicast_discovery_complete_cb(struct bt_conn *conn, int err,
 		msg.sirk = csis_inst->info.sirk;
 	}
 
-	LOG_DBG("Unicast discovery complete cb");
-
 	msg.event = LE_AUDIO_EVT_COORD_SET_DISCOVERED;
 	msg.conn = conn;
 
@@ -1281,13 +1490,14 @@ static void unicast_discovery_complete_cb(struct bt_conn *conn, int err,
 
 static void unicast_start_complete_cb(int err, struct bt_conn *conn)
 {
-	k_sem_give(&sem_cap_procedure_proceed);
-
 	if (err) {
-		LOG_WRN("Failed start_complete for conn: %p, err: %d", (void *)conn, err);
+		LOG_ERR("Start complete CB, conn: %p, err: %d", (void *)conn, err);
+	} else {
+		LOG_DBG("Start complete CB, conn: %p", (void *)conn);
 	}
 
-	LOG_DBG("Unicast start complete cb");
+	k_sem_give(&sem_cap_procedure_proceed);
+
 	playing_state = true;
 
 	cap_proc_waiting_check();
@@ -1295,24 +1505,26 @@ static void unicast_start_complete_cb(int err, struct bt_conn *conn)
 
 static void unicast_update_complete_cb(int err, struct bt_conn *conn)
 {
-	k_sem_give(&sem_cap_procedure_proceed);
-
+	
 	if (err) {
-		LOG_WRN("Failed update_complete for conn: %p, err: %d", (void *)conn, err);
+		LOG_ERR("Update complete CB, conn: %p, err: %d", (void *)conn, err);
+	} else {
+		LOG_DBG("Update complete CB, conn: %p", (void *)conn);
 	}
 
-	LOG_DBG("Unicast update complete cb");
+	k_sem_give(&sem_cap_procedure_proceed);
 }
 
 static void unicast_stop_complete_cb(int err, struct bt_conn *conn)
 {
-	k_sem_give(&sem_cap_procedure_proceed);
-
 	if (err) {
-		LOG_WRN("Failed stop_complete for conn: %p, err: %d", (void *)conn, err);
+		LOG_ERR("Stop complete CB, conn: %p, err: %d", (void *)conn, err);
+	} else {
+		LOG_DBG("Stop complete CB, conn: %p", (void *)conn);
 	}
 
-	LOG_DBG("Unicast stop complete cb");
+	k_sem_give(&sem_cap_procedure_proceed);
+
 	playing_state = false;
 
 	cap_proc_waiting_check();
@@ -1324,6 +1536,8 @@ static struct bt_cap_initiator_cb cap_cbs = {
 	.unicast_update_complete = unicast_update_complete_cb,
 	.unicast_stop_complete = unicast_stop_complete_cb,
 };
+
+/* bt cap initiator callbacks end ----------------------------------------------------------------*/
 
 static bool first_source_location_get(struct bt_cap_stream *stream, void *user_data)
 {
@@ -1486,6 +1700,7 @@ int unicast_client_locations_get(uint32_t *locations, enum bt_audio_dir dir)
 void unicast_client_conn_disconnected(struct bt_conn *conn)
 {
 	int ret;
+	LOG_DBG("Disconnected CB");
 
 	ret = srv_store_lock(CAP_PROCED_SEM_WAIT_TIME_MS);
 	if (ret < 0) {
@@ -1504,6 +1719,7 @@ void unicast_client_conn_disconnected(struct bt_conn *conn)
 int unicast_client_discover(struct bt_conn *conn, enum unicast_discover_dir dir)
 {
 	int ret;
+	LOG_DBG("Discover CB");
 
 	ret = srv_store_lock(CAP_PROCED_SEM_WAIT_TIME_MS);
 	if (ret < 0) {
@@ -1566,6 +1782,7 @@ int unicast_client_discover(struct bt_conn *conn, enum unicast_discover_dir dir)
 static bool is_connected(struct bt_conn const *const conn)
 {
 	int ret;
+	LOG_DBG("Connected CB");
 
 	/* Check if the connection is valid */
 	struct bt_conn_info info;
@@ -1638,6 +1855,7 @@ static bool add_to_start_params(struct server_store *server, void *user_data)
 int unicast_client_start(uint8_t cig_index)
 {
 	int ret;
+	LOG_DBG("Unicast client start");
 
 	ret = k_sem_take(&sem_cap_procedure_proceed, K_NO_WAIT);
 	if (ret == -EBUSY) {
@@ -1658,7 +1876,7 @@ int unicast_client_start(uint8_t cig_index)
 	}
 
 	if (unicast_group == NULL) {
-		LOG_WRN("No unicast group to start");
+		LOG_DBG("No unicast group to start");
 		k_sem_give(&sem_cap_procedure_proceed);
 		return -EIO;
 	}
@@ -1745,6 +1963,7 @@ static bool server_connected_check(struct bt_cap_stream *stream, void *user_data
 
 int unicast_client_stop(uint8_t cig_index)
 {
+	LOG_DBG("Unicast client stop");
 	int ret;
 	struct bt_cap_stream *streams[(CONFIG_BT_BAP_UNICAST_CLIENT_ASE_SRC_COUNT +
 				       CONFIG_BT_BAP_UNICAST_CLIENT_ASE_SNK_COUNT) *
@@ -1957,7 +2176,7 @@ int unicast_client_enable(uint8_t cig_index, le_audio_receive_cb recv_cb)
 {
 	int ret;
 	static bool initialized;
-
+	LOG_WRN("Unicast client enable");
 	if (initialized) {
 		LOG_WRN("Already initialized");
 		return -EALREADY;
