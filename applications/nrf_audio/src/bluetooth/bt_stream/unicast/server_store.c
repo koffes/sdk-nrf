@@ -442,6 +442,7 @@ static bool pres_dly_stream_ignore(struct bt_bap_stream const *const existing_st
 	/* Check if the existing stream has gotten into a codec configured, QoS configured,
 	 * enabling or streaming state.
 	 */
+
 	if (!le_audio_ep_state_check(existing_stream->ep, BT_BAP_EP_STATE_CODEC_CONFIGURED) &&
 	    !le_audio_ep_state_check(existing_stream->ep, BT_BAP_EP_STATE_QOS_CONFIGURED) &&
 	    !le_audio_ep_state_check(existing_stream->ep, BT_BAP_EP_STATE_ENABLING) &&
