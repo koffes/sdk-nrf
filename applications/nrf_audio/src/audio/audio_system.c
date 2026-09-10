@@ -581,6 +581,7 @@ int audio_system_init(void)
 {
 	int ret;
 
+#if !defined(CONFIG_SOC_SERIES_BSIM_NRF53X)
 	if (NRF_CLOCK_HAS_HFCLKAUDIO) {
 		ret = audio_clock_init();
 		if (ret) {
@@ -588,6 +589,7 @@ int audio_system_init(void)
 			return ret;
 		}
 	}
+#endif /* !CONFIG_SOC_SERIES_BSIM_NRF53X */
 
 #if ((CONFIG_AUDIO_DEV == GATEWAY) && (CONFIG_AUDIO_SOURCE_USB))
 	bool host_in = IS_ENABLED(CONFIG_STREAM_BIDIRECTIONAL);

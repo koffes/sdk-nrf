@@ -24,9 +24,18 @@ target_sources_ifdef(CONFIG_AUDIO_SOURCE_USB app PRIVATE
   audio_usb_init.c
 )
 
-target_sources_ifdef(CONFIG_AUDIO_SOURCE_I2S app PRIVATE
-  audio_i2s.c
-)
+if(CONFIG_AUDIO_I2S_FILE_BACKEND)
+  target_sources(app PRIVATE
+    audio_i2s_file.c
+  )
+  target_sources(native_simulator INTERFACE
+    audio_i2s_file_bottom.c
+  )
+elseif(CONFIG_AUDIO_SOURCE_I2S)
+  target_sources(app PRIVATE
+    audio_i2s.c
+  )
+endif()
 
 target_sources_ifdef(CONFIG_NRF_AUDIO_CS47L63_DRIVER app PRIVATE
   hw_codec.c

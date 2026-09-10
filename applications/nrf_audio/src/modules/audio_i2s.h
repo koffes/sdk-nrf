@@ -41,6 +41,15 @@
 #define BLOCK_SIZE_BYTES      (FRAME_SIZE_BYTES / CONFIG_FIFO_FRAME_SPLIT_NUM)
 
 /**
+ * @brief I2S block period in microseconds.
+ *
+ * Fixed by the audio pipeline's block-based double buffering scheme. Any backend driving
+ * the callback registered with audio_i2s_blk_comp_cb_register() (real HW ISR or a
+ * simulated backend) must call it at this cadence.
+ */
+#define AUDIO_I2S_BLK_PERIOD_US 500
+
+/**
  * @brief Calculate number of samples per I2S block.
  *
  * This macro calculates the number of audio samples in each I2S block,

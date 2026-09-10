@@ -130,7 +130,7 @@ int sw_codec_encode(struct net_buf *audio_frame_in, struct net_buf *audio_frame_
 		uint8_t *enc_in = audio_frame_in->data;
 		uint8_t *enc_out = audio_frame_out->data;
 		size_t enc_in_size = 0;
-		uint16_t bytes_written;
+		uint16_t bytes_written = 0;
 		uint32_t loc_in = 0;
 		uint32_t loc_out = 0;
 
@@ -431,8 +431,6 @@ int sw_codec_decode(struct net_buf const *const audio_frame_in,
 
 int sw_codec_uninit(struct sw_codec_config sw_codec_cfg)
 {
-	int ret;
-
 	if (m_config.sw_codec != sw_codec_cfg.sw_codec) {
 		LOG_ERR("Trying to uninit a codec that is not first initialized");
 		return -ENODEV;
@@ -441,6 +439,9 @@ int sw_codec_uninit(struct sw_codec_config sw_codec_cfg)
 	switch (m_config.sw_codec) {
 	case SW_CODEC_LC3:
 #if CONFIG_SW_CODEC_LC3_T2_SOFTWARE
+	{
+		int ret;
+
 		if (sw_codec_cfg.encoder.enabled) {
 			if (!m_config.encoder.enabled) {
 				LOG_ERR("Trying to uninit encoder, it has not been "
@@ -475,6 +476,7 @@ int sw_codec_uninit(struct sw_codec_config sw_codec_cfg)
 		if (ret) {
 			return ret;
 		}
+	}
 #elif CONFIG_SW_CODEC_LC3_GOOGLE
 		if (sw_codec_cfg.encoder.enabled) {
 			memset(google_enc_ch, 0, sizeof(google_enc_ch));
@@ -486,7 +488,7 @@ int sw_codec_uninit(struct sw_codec_config sw_codec_cfg)
 			m_config.decoder.enabled = false;
 		}
 #endif
-		break;
+	break;
 	default:
 		LOG_ERR("Unsupported codec: %d", m_config.sw_codec);
 		return false;

@@ -412,10 +412,14 @@ static int ext_adv_populate(uint8_t big_index, struct broadcast_source_ext_adv_d
 	uint32_t broadcast_id = 0x000000;
 	bool fixed_id = !IS_ENABLED(CONFIG_BT_AUDIO_USE_BROADCAST_ID_RANDOM);
 
-	if (IS_ENABLED(CONFIG_BT_AUDIO_USE_BROADCAST_ID_FICR)) {
+	if (IS_ENABLED(CONFIG_BT_AUDIO_USE_BROADCAST_ID_FICR) &&
+	    !IS_ENABLED(CONFIG_SOC_SERIES_BSIM_NRF53X)) {
 		LOG_DBG("Using FICR ID");
+#if !defined(CONFIG_SOC_SERIES_BSIM_NRF53X)
 		broadcast_id = NRF_FICR->NFC.TAGHEADER0 >> 8;
-	} else if (IS_ENABLED(CONFIG_BT_AUDIO_USE_BROADCAST_ID_FIXED)) {
+#endif
+	} else if (IS_ENABLED(CONFIG_BT_AUDIO_USE_BROADCAST_ID_FIXED) ||
+		   IS_ENABLED(CONFIG_SOC_SERIES_BSIM_NRF53X)) {
 		LOG_DBG("Using fixed ID");
 		broadcast_id = CONFIG_BT_AUDIO_BROADCAST_ID_FIXED;
 	} else {

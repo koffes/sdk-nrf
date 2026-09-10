@@ -38,7 +38,7 @@ LOG_MODULE_REGISTER(audio_datapath, CONFIG_AUDIO_DATAPATH_LOG_LEVEL);
  *   - frame: encoded audio packet exchanged with connectivity
  */
 
-#define BLK_PERIOD_US 500
+#define BLK_PERIOD_US AUDIO_I2S_BLK_PERIOD_US
 
 /* Total sample FIFO period in microseconds */
 #define FIFO_CHANNELS_MAX   MAX(CONFIG_AUDIO_INPUT_CHANNELS, CONFIG_AUDIO_OUTPUT_CHANNELS)

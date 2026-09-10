@@ -18,7 +18,9 @@
 #define _AUDIO_CLOCK_H_
 
 #include <stdint.h>
+#if !defined(CONFIG_SOC_SERIES_BSIM_NRF53X)
 #include <nrfx_clock.h>
+#endif
 
 /** @brief HFCLKAUDIO frequency value for 12.288-MHz output.
  *

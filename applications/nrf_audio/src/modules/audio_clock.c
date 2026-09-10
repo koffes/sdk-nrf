@@ -9,25 +9,31 @@
 #include <errno.h>
 #include <zephyr/sys/util.h>
 #include <zephyr/kernel.h>
+#if !defined(CONFIG_SOC_SERIES_BSIM_NRF53X)
 #include <nrfx_clock_hfclkaudio.h>
+#endif
 
 int audio_clock_set(uint16_t freq_value)
 {
 	freq_value = CLAMP(freq_value, APLL_FREQ_MIN, APLL_FREQ_MAX);
 
-#if NRF_CLOCK_HAS_HFCLKAUDIO
+#if defined(CONFIG_SOC_SERIES_BSIM_NRF53X)
+	/* BabbleSim models no APLL/HFCLKAUDIO peripheral; nothing to configure. */
+	return 0;
+#elif NRF_CLOCK_HAS_HFCLKAUDIO
 	nrfx_clock_hfclkaudio_config_set(freq_value);
 
+	return 0;
 #else
 	return -ENOTSUP;
 #endif /* NRF_CLOCK_HAS_HFCLKAUDIO */
-
-	return 0;
 }
 
 int audio_clock_init(void)
 {
-#if NRF_CLOCK_HAS_HFCLKAUDIO
+#if defined(CONFIG_SOC_SERIES_BSIM_NRF53X)
+	return 0;
+#elif NRF_CLOCK_HAS_HFCLKAUDIO
 	int ret;
 
 	ret = nrfx_clock_divider_set(NRF_CLOCK_DOMAIN_HFCLK, NRF_CLOCK_HFCLK_DIV_1);
@@ -46,9 +52,9 @@ int audio_clock_init(void)
 	while (!NRF_CLOCK_EVENT_HFCLKAUDIOSTARTED) {
 		k_sleep(K_MSEC(1));
 	}
+
+	return 0;
 #else
 	return -ENOTSUP;
 #endif /* NRF_CLOCK_HAS_HFCLKAUDIO */
-
-	return 0;
 }

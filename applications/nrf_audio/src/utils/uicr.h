@@ -9,8 +9,10 @@
 
 #include <stdint.h>
 
+#if !defined(CONFIG_SOC_SERIES_BSIM_NRF53X)
 // TODO: Discuss better alternative for UICR storage. This memory range is not documented
 #define UICR_APP_BASE_ADDR (NRF_UICR_S_BASE + 0xF0)
+#endif
 
 /**
  * @brief Get raw location value from UICR as bitfield
