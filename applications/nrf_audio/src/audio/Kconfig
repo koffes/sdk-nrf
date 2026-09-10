@@ -215,15 +215,25 @@ menu "SW Codec"
 
 choice SW_CODEC_DEFAULT
 	prompt "Starting SW codec"
-	default SW_CODEC_LC3
+	default SW_CODEC_LC3_GOOGLE
 	help
 	  Select the default codec to use on start up.
 
-config SW_CODEC_LC3
-	bool "LC3"
+config SW_CODEC_LC3_T2
+	bool "LC3 (T2 Software) library"
 	select SW_CODEC_LC3_T2_SOFTWARE
 	help
+	  Use the precompiled T2S LC3 codec. LC3 is the mandatory codec for LE Audio.
+
+config SW_CODEC_LC3_GOOGLE
+	bool "LC3 (Google) compiled"
+	select EXPERIMENTAL
+	select LIBLC3
+	help
+	  Use the source-built Google LC3 codec (from the Zephyr liblc3 module) instead of the
+	  precompiled T2S LC3 codec. When selected, the T2S LC3 codec is not compiled in.
 	  LC3 is the mandatory codec for LE Audio.
+	  Experimental feature.
 
 config SW_CODEC_NONE
 	bool "None"
@@ -240,7 +250,7 @@ config SW_CODEC_PLC_DISABLED
 
 #----------------------------------------------------------------------------#
 menu "LC3"
-visible if SW_CODEC_LC3
+visible if SW_CODEC_LC3_T2 || SW_CODEC_LC3_GOOGLE
 
 config LC3_BITRATE_MAX
 	int "Max bitrate for LC3"

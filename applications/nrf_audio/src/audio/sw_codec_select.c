@@ -14,9 +14,11 @@
 
 #include "macros_common.h"
 
-#if (CONFIG_SW_CODEC_LC3)
+#if CONFIG_SW_CODEC_LC3_T2_SOFTWARE
 #include "sw_codec_lc3.h"
-#endif /* (CONFIG_SW_CODEC_LC3) */
+#elif CONFIG_SW_CODEC_LC3_GOOGLE
+#include <lc3.h>
+#endif
 
 #include <zephyr/logging/log.h>
 LOG_MODULE_REGISTER(sw_codec_select, CONFIG_SW_CODEC_SELECT_LOG_LEVEL);
@@ -28,6 +30,18 @@ static struct sw_codec_config m_config;
 
 static struct sample_rate_converter_ctx encoder_converters[CONFIG_AUDIO_ENCODE_CHANNELS_MAX];
 static struct sample_rate_converter_ctx decoder_converters[CONFIG_AUDIO_DECODE_CHANNELS_MAX];
+
+#if CONFIG_SW_CODEC_LC3_GOOGLE
+static lc3_encoder_t google_enc_ch[CONFIG_AUDIO_ENCODE_CHANNELS_MAX];
+static lc3_decoder_t google_dec_ch[CONFIG_AUDIO_DECODE_CHANNELS_MAX];
+static lc3_encoder_mem_48k_t google_enc_mem[CONFIG_AUDIO_ENCODE_CHANNELS_MAX];
+static lc3_decoder_mem_48k_t google_dec_mem[CONFIG_AUDIO_DECODE_CHANNELS_MAX];
+
+static enum lc3_pcm_format google_pcm_format(void)
+{
+	return CONFIG_AUDIO_BIT_DEPTH_BITS == 16 ? LC3_PCM_FORMAT_S16 : LC3_PCM_FORMAT_S24;
+}
+#endif /* CONFIG_SW_CODEC_LC3_GOOGLE */
 
 /**
  * @brief	Converts the sample rate of the uncompressed audio stream if needed.
@@ -107,7 +121,7 @@ int sw_codec_encode(struct net_buf *audio_frame_in, struct net_buf *audio_frame_
 
 	switch (m_config.sw_codec) {
 	case SW_CODEC_LC3: {
-#if (CONFIG_SW_CODEC_LC3)
+#if (CONFIG_SW_CODEC_LC3_T2_SOFTWARE || CONFIG_SW_CODEC_LC3_GOOGLE)
 		uint8_t inter_buf[PCM_NUM_BYTES_MONO];
 		uint8_t src_buf[PCM_NUM_BYTES_MONO];
 		uint8_t chan_in_num, chan_out_num;
@@ -191,9 +205,19 @@ int sw_codec_encode(struct net_buf *audio_frame_in, struct net_buf *audio_frame_
 					&enc_in_size);
 				ERR_CHK_MSG(ret, "Encode: Sample rate conversion failed");
 
+#if CONFIG_SW_CODEC_LC3_T2_SOFTWARE
 				ret = sw_codec_lc3_enc_run(
 					enc_in, enc_in_size, meta_out->bitrate_bps, chan_out,
 					meta_in->bytes_per_location, enc_out, &bytes_written);
+#elif CONFIG_SW_CODEC_LC3_GOOGLE
+				bytes_written = meta_out->bytes_per_location;
+				ret = lc3_encode(google_enc_ch[chan_out], google_pcm_format(),
+						 enc_in, 1, bytes_written, enc_out) == 0
+					      ? 0
+					      : -EINVAL;
+#else
+#error "No software codec selected"
+#endif
 				ERR_CHK_MSG(ret, "Encode failed");
 
 				enc_out += bytes_written;
@@ -223,7 +247,7 @@ int sw_codec_encode(struct net_buf *audio_frame_in, struct net_buf *audio_frame_
 			    meta_out->bytes_per_location * audio_metadata_num_loc_get(meta_out));
 
 		return 0;
-#endif /* (CONFIG_SW_CODEC_LC3) */
+#endif /* CONFIG_SW_CODEC_LC3_T2_SOFTWARE || CONFIG_SW_CODEC_LC3_GOOGLE */
 		break;
 	}
 	default:
@@ -252,7 +276,7 @@ int sw_codec_decode(struct net_buf const *const audio_frame_in,
 
 	switch (m_config.sw_codec) {
 	case SW_CODEC_LC3: {
-#if (CONFIG_SW_CODEC_LC3)
+#if (CONFIG_SW_CODEC_LC3_T2_SOFTWARE || CONFIG_SW_CODEC_LC3_GOOGLE)
 		uint8_t dec_out_buf[PCM_NUM_BYTES_MONO];
 		uint8_t src_buf[PCM_NUM_BYTES_MONO];
 		uint8_t *data_in;
@@ -335,10 +359,28 @@ int sw_codec_decode(struct net_buf const *const audio_frame_in,
 				data_in = (uint8_t *)audio_frame_in->data +
 					  (meta_in->bytes_per_location * chan_in);
 
+#if CONFIG_SW_CODEC_LC3_T2_SOFTWARE
 				ret = sw_codec_lc3_dec_run(data_in, meta_in->bytes_per_location,
 							   audio_frame_out->size, chan_in, dec_out,
 							   &bytes_written,
 							   (meta_in->bad_data & bad_data_mask));
+#elif CONFIG_SW_CODEC_LC3_GOOGLE
+				{
+					bool bad_frame = meta_in->bad_data & bad_data_mask;
+					int lc3_ret = lc3_decode(google_dec_ch[chan_in],
+								 bad_frame ? NULL : data_in,
+								 meta_in->bytes_per_location,
+								 google_pcm_format(), dec_out, 1);
+
+					bytes_written = PCM_NUM_BYTES_MONO;
+					if (lc3_ret > 0 && IS_ENABLED(CONFIG_LC3_PLC_DISABLED)) {
+						memset(dec_out, 0, bytes_written);
+					}
+					ret = lc3_ret < 0 ? -EINVAL : 0;
+				}
+#else
+#error "No software codec selected"
+#endif
 				ERR_CHK_MSG(ret, "Decode failed");
 
 				ret = sw_codec_sample_rate_convert(
@@ -376,7 +418,7 @@ int sw_codec_decode(struct net_buf const *const audio_frame_in,
 		net_buf_add(audio_frame_out,
 			    meta_out->bytes_per_location * audio_metadata_num_loc_get(meta_out));
 
-#endif /* (CONFIG_SW_CODEC_LC3) */
+#endif /* CONFIG_SW_CODEC_LC3_T2_SOFTWARE || CONFIG_SW_CODEC_LC3_GOOGLE */
 		break;
 	}
 	default:
@@ -398,7 +440,7 @@ int sw_codec_uninit(struct sw_codec_config sw_codec_cfg)
 
 	switch (m_config.sw_codec) {
 	case SW_CODEC_LC3:
-#if (CONFIG_SW_CODEC_LC3)
+#if CONFIG_SW_CODEC_LC3_T2_SOFTWARE
 		if (sw_codec_cfg.encoder.enabled) {
 			if (!m_config.encoder.enabled) {
 				LOG_ERR("Trying to uninit encoder, it has not been "
@@ -433,7 +475,17 @@ int sw_codec_uninit(struct sw_codec_config sw_codec_cfg)
 		if (ret) {
 			return ret;
 		}
-#endif /* (CONFIG_SW_CODEC_LC3) */
+#elif CONFIG_SW_CODEC_LC3_GOOGLE
+		if (sw_codec_cfg.encoder.enabled) {
+			memset(google_enc_ch, 0, sizeof(google_enc_ch));
+			m_config.encoder.enabled = false;
+		}
+
+		if (sw_codec_cfg.decoder.enabled) {
+			memset(google_dec_ch, 0, sizeof(google_dec_ch));
+			m_config.decoder.enabled = false;
+		}
+#endif
 		break;
 	default:
 		LOG_ERR("Unsupported codec: %d", m_config.sw_codec);
@@ -451,7 +503,7 @@ int sw_codec_init(struct sw_codec_config sw_codec_cfg)
 
 	switch (sw_codec_cfg.sw_codec) {
 	case SW_CODEC_LC3: {
-#if (CONFIG_SW_CODEC_LC3)
+#if CONFIG_SW_CODEC_LC3_T2_SOFTWARE
 		if (!m_config.initialized) {
 			/* Check if LC3 is already initialized */
 			uint16_t encoder_sample_rate = 0;
@@ -514,11 +566,48 @@ int sw_codec_init(struct sw_codec_config sw_codec_cfg)
 			}
 		}
 		break;
+#elif CONFIG_SW_CODEC_LC3_GOOGLE
+		if (sw_codec_cfg.encoder.enabled) {
+			if (m_config.encoder.enabled) {
+				LOG_WRN("The LC3 encoder is already initialized");
+				return -EALREADY;
+			}
+
+			for (uint8_t ch = 0; ch < sw_codec_cfg.encoder.num_ch; ch++) {
+				google_enc_ch[ch] =
+					lc3_setup_encoder(CONFIG_AUDIO_FRAME_DURATION_US,
+							  sw_codec_cfg.encoder.sample_rate_hz, 0,
+							  &google_enc_mem[ch]);
+				if (google_enc_ch[ch] == NULL) {
+					LOG_ERR("Failed to set up Google LC3 encoder ch: %d", ch);
+					return -EINVAL;
+				}
+			}
+		}
+
+		if (sw_codec_cfg.decoder.enabled) {
+			if (m_config.decoder.enabled) {
+				LOG_WRN("The LC3 decoder is already initialized");
+				return -EALREADY;
+			}
+
+			for (uint8_t ch = 0; ch < sw_codec_cfg.decoder.num_ch; ch++) {
+				google_dec_ch[ch] =
+					lc3_setup_decoder(CONFIG_AUDIO_FRAME_DURATION_US,
+							  sw_codec_cfg.decoder.sample_rate_hz, 0,
+							  &google_dec_mem[ch]);
+				if (google_dec_ch[ch] == NULL) {
+					LOG_ERR("Failed to set up Google LC3 decoder ch: %d", ch);
+					return -EINVAL;
+				}
+			}
+		}
+		break;
 #else
 		LOG_ERR("LC3 is not compiled in, please open menuconfig and select "
 			"LC3");
 		return -ENODEV;
-#endif /* (CONFIG_SW_CODEC_LC3) */
+#endif
 	}
 
 	default:

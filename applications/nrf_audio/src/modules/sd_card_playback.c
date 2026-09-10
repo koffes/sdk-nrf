@@ -7,13 +7,16 @@
 #include "sd_card_playback.h"
 
 #include <stdint.h>
+#include <errno.h>
 #include <math.h>
 #include <zephyr/sys/ring_buffer.h>
 #include <zephyr/shell/shell.h>
 #include <pcm_mix.h>
 
 #include "sd_card.h"
+#if CONFIG_SW_CODEC_LC3_T2_SOFTWARE
 #include "sw_codec_lc3.h"
+#endif
 #include "sw_codec_select.h"
 #include "audio_system.h"
 
@@ -334,9 +337,13 @@ static int sd_card_playback_play_lc3(void)
 		}
 
 		/* Decode audio data frame */
+#if CONFIG_SW_CODEC_LC3
 		ret = sw_codec_lc3_dec_run(lc3_frame, lc3_playback_cfg.lc3_frame_length_bytes,
 					   pcm_frame_size, decoder_num_ch - 1, pcm_mono_frame,
 					   &pcm_mono_write_size, false);
+#else
+		ret = -ENOTSUP;
+#endif
 		if (ret) {
 			LOG_ERR("Decoding err: %d", ret);
 			break;

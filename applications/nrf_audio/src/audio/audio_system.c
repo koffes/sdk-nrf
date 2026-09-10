@@ -90,7 +90,7 @@ bool sample_rate_valid(uint32_t sample_rate_hz)
 
 static void audio_gateway_configure(void)
 {
-	if (IS_ENABLED(CONFIG_SW_CODEC_LC3)) {
+	if (IS_ENABLED(CONFIG_SW_CODEC_LC3_T2_SOFTWARE) || IS_ENABLED(CONFIG_SW_CODEC_LC3_GOOGLE)) {
 		sw_codec_cfg.sw_codec = SW_CODEC_LC3;
 	} else {
 		ERR_CHK_MSG(-EINVAL, "No codec selected");
@@ -111,7 +111,7 @@ static void audio_gateway_configure(void)
 
 static void audio_headset_configure(void)
 {
-	if (IS_ENABLED(CONFIG_SW_CODEC_LC3)) {
+	if (IS_ENABLED(CONFIG_SW_CODEC_LC3_T2_SOFTWARE) || IS_ENABLED(CONFIG_SW_CODEC_LC3_GOOGLE)) {
 		sw_codec_cfg.sw_codec = SW_CODEC_LC3;
 	} else {
 		ERR_CHK_MSG(-EINVAL, "No codec selected");

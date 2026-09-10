@@ -26,7 +26,8 @@
  * configured I2S sample rate, number of channels, and bit depth. The frame
  * duration can be either 10 ms or 7.5 ms.
  */
-#if ((CONFIG_AUDIO_FRAME_DURATION_US == 7500) && CONFIG_SW_CODEC_LC3)
+#if ((CONFIG_AUDIO_FRAME_DURATION_US == 7500) &&                                                   \
+     (CONFIG_SW_CODEC_LC3_T2_SOFTWARE || CONFIG_SW_CODEC_LC3_GOOGLE))
 
 #define FRAME_SIZE_BYTES                                                                           \
 	((CONFIG_I2S_LRCK_FREQ_HZ / 1000 * 15 / 2) * CONFIG_I2S_CH_NUM *                           \
@@ -34,7 +35,7 @@
 #else
 #define FRAME_SIZE_BYTES                                                                           \
 	((CONFIG_I2S_LRCK_FREQ_HZ / 1000 * 10) * CONFIG_I2S_CH_NUM * CONFIG_AUDIO_BIT_DEPTH_OCTETS)
-#endif /* ((CONFIG_AUDIO_FRAME_DURATION_US == 7500) && CONFIG_SW_CODEC_LC3) */
+#endif /* 7.5 ms LC3 frame */
 
 #define FRAME_SIZE_MONO_BYTES (FRAME_SIZE_BYTES / CONFIG_I2S_CH_NUM)
 #define BLOCK_SIZE_BYTES      (FRAME_SIZE_BYTES / CONFIG_FIFO_FRAME_SPLIT_NUM)

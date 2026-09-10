@@ -24,7 +24,7 @@
 #include <zephyr/net_buf.h>
 #include "device_location.h"
 
-#if (CONFIG_SW_CODEC_LC3)
+#if (SW_CODEC_LC3_T2_SOFTWARE)
 #define LC3_MAX_FRAME_SIZE_US	10000
 #define LC3_ENC_MONO_FRAME_SIZE                                                                    \
 	(CONFIG_LC3_BITRATE_MAX * LC3_MAX_FRAME_SIZE_US / (8 * USEC_PER_SEC))
@@ -33,12 +33,23 @@
 	 USEC_PER_SEC)
 #define LC3_ENC_TIME_US 3000
 #define LC3_DEC_TIME_US 1500
+
+#elif (CONFIG_SW_CODEC_LC3_GOOGLE)
+#define LC3_MAX_FRAME_SIZE_US 10000
+#define LC3_ENC_MONO_FRAME_SIZE                                                                    \
+	(CONFIG_LC3_BITRATE_MAX * LC3_MAX_FRAME_SIZE_US / (8 * USEC_PER_SEC))
+#define LC3_PCM_NUM_BYTES_MONO                                                                     \
+	(CONFIG_AUDIO_SAMPLE_RATE_HZ * CONFIG_AUDIO_BIT_DEPTH_OCTETS * LC3_MAX_FRAME_SIZE_US /     \
+	 USEC_PER_SEC)
+#define LC3_ENC_TIME_US 3000
+#define LC3_DEC_TIME_US 1500
+
 #else
 #define LC3_ENC_MONO_FRAME_SIZE 0
 #define LC3_PCM_NUM_BYTES_MONO	0
 #define LC3_ENC_TIME_US		0
 #define LC3_DEC_TIME_US		0
-#endif /* CONFIG_SW_CODEC_LC3 */
+#endif
 
 /* Max will be used when multiple codecs are supported */
 #define ENC_MAX_FRAME_SIZE	      MAX(LC3_ENC_MONO_FRAME_SIZE, 0)
