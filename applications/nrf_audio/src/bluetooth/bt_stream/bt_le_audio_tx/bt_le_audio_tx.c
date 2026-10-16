@@ -376,13 +376,15 @@ static void tx_call_interval_check(struct bt_le_audio_tx_ctx *ctx, uint32_t ts_n
 
 		if (time_since_last_call_us > PRINT_WRN_LIMIT_US) {
 			/* Likely a result of a stream being paused/restarted */
-			LOG_INF("Audio tx called with interval of %u us, (min %u us, max %u us) "
+			LOG_INF_RATELIMIT(
+				"Audio tx called with interval of %u us, (min %u us, max %u us) "
 				"expected "
 				"around %u us. Resync with controller",
 				time_since_last_call_us, lower_lim_us, upper_lim_us,
 				common_interval_us);
 		} else {
-			LOG_WRN("Audio tx called with interval of %u us, (min %u us, max %u us) "
+			LOG_WRN_RATELIMIT(
+				"Audio tx called with interval of %u us, (min %u us, max %u us) "
 				"expected "
 				"around %u us. Resync with controller",
 				time_since_last_call_us, lower_lim_us, upper_lim_us,
