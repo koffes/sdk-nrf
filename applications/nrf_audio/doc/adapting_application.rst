@@ -7,7 +7,11 @@ Adapting nRF Audio applications for end products
    :local:
    :depth: 2
 
-This page describes the relevant configuration sources and lists the steps required for adapting the :ref:`nrf_audio_app` to end products.
+Diff test1
+Diff test2
+Diff test 3 during rebase
+
+describes the relevant configuration sources and lists the steps required for adapting the :ref:`nrf_audio_app` to end products.
 
 .. note::
 
